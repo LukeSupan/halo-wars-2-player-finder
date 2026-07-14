@@ -17,13 +17,20 @@ this checks exclusively custom games. if you want others you can alter this to a
    ```env
    HALO_API_KEY=your_halo_api_key_here
    START_DATE=
+   END_DATE=
+   MIN_MATCH_DURATION_SECONDS=180
    ```
 
-   To ignore older games, set `START_DATE` with `YYYY-MM-DD`, like:
+   To ignore older or newer games, set `START_DATE` / `END_DATE` with
+   `YYYY-MM-DD`, like:
 
    ```env
    START_DATE=2026-07-14
+   END_DATE=2026-07-31
    ```
+
+   To change the short-game cutoff, set `MIN_MATCH_DURATION_SECONDS`. The
+   default is `180`, which means 3 minutes.
 
 3. Edit `tracked_players.txt` to change who gets checked. Add one Xbox
    gamertag per line.
@@ -47,10 +54,11 @@ this checks exclusively custom games. if you want others you can alter this to a
    python main.py
    ```
 
-The script only checks custom games that lasted at least 3 minutes. Every
-player in the match must be listed in `tracked_players.txt`; matches with
-unlisted players are skipped. It prints matches in chronological order when the
-tracked players include both a winner and a loser, like:
+The script only checks custom games that lasted at least
+`MIN_MATCH_DURATION_SECONDS`. Every player in the match must be listed in
+`tracked_players.txt`; matches with unlisted players are skipped. It prints
+matches in chronological order when the tracked players include both a winner
+and a loser, like:
 
 ```text
 luke,ray/win|jr,evan/loss
