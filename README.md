@@ -19,6 +19,7 @@ this checks exclusively custom games. if you want others you can alter this to a
    START_DATE=
    END_DATE=
    MIN_MATCH_DURATION_SECONDS=180
+   INCLUDE_BOT_GAMES=false
    ```
 
    To ignore older or newer games, set `START_DATE` / `END_DATE` with
@@ -31,6 +32,8 @@ this checks exclusively custom games. if you want others you can alter this to a
 
    To change the short-game cutoff, set `MIN_MATCH_DURATION_SECONDS`. The
    default is `180`, which means 3 minutes.
+
+   To always run the slower bot-game check, set `INCLUDE_BOT_GAMES=true`.
 
 3. Edit `tracked_players.txt` to change who gets checked. Add one Xbox
    gamertag per line.
@@ -54,29 +57,39 @@ this checks exclusively custom games. if you want others you can alter this to a
    python main.py
    ```
 
+   To include bot games where every human is tracked and each team has at
+   least one human player, run the slower mode:
+
+   ```powershell
+   python main.py --include-bot-games
+   ```
+
 The script only checks custom games that lasted at least
-`MIN_MATCH_DURATION_SECONDS`. Every player in the match must be listed in
-`tracked_players.txt`; matches with bots or unlisted players are skipped. It
-prints matches in chronological order when the tracked players include both a
-winner and a loser, like:
+`MIN_MATCH_DURATION_SECONDS`. By default, every player in the match must be
+listed in `tracked_players.txt`; matches with bots or unlisted players are
+skipped. With `--include-bot-games`, matches with bots are included only when
+every human player is tracked and each team has at least one human. It prints
+matches in chronological order when the tracked players include both a winner
+and a loser, like:
 
 ```text
 luke,ray/win|jr,evan/loss
 ```
 
 It also saves that copy-friendly output to `formatted_matches.txt`, a readable
-chronological match list with dates, winners, losers, map names, and durations
-in `match_history.txt`, plus a simple stats compilation in `stats_summary.txt`
-with:
+chronological match list with dates, winners, losers, leader names, map names,
+and durations in `match_history.txt`, plus a simple stats compilation in
+`stats_summary.txt` with:
 
 - overall winrate for each tracked player
 - winrate for each tracked player on each leader name
 
 For speed, normal matches use the player-history rows that were already
 fetched. If a match looks suspicious because a tracked player did not complete
-the match or one team has mixed win/loss results, the script fetches full match
-details for only that match and uses team-level outcome data to fix leaver
-cases. Those full-detail responses are cached in `match_details_cache.json`.
+the match, one team has mixed win/loss results, or slow bot mode needs to check
+extra players, the script fetches full match details and uses team-level outcome
+data to fix leaver cases and verify bot games. Those full-detail responses are
+cached in `match_details_cache.json`.
 
 The generated `formatted_matches.txt`, `match_history.txt`, `stats_summary.txt`,
 `group_matches_export.json`, and `match_details_cache.json` files are ignored by

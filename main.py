@@ -19,7 +19,9 @@ HOW "AT LEAST 2 TRACKED PLAYERS" IS DETERMINED
 Each tracked player's own match history is pulled. If the same MatchId
 shows up in 2+ of those histories, that means 2+ of your tracked players
 were in that game together since a bot opponent never has its own match
-history, so solo/bot-only games never qualify. No mode filtering needed.
+history, so solo/bot-only games never qualify. Bot games can be included
+with --include-bot-games, which is slower because extra match details must
+be checked.
 
 CUSTOM GAME OUTPUT
 ------------------
@@ -30,6 +32,7 @@ which filters out online games where all tracked players were on the same side.
 Halo Wars 2 match history uses PlayerMatchOutcome: 1 = win, 2 = loss.
 """
 
+import argparse
 import time
 import json
 import os
@@ -109,6 +112,29 @@ def load_player_aliases(path=PLAYER_ALIASES_FILE):
     return cleaned
 
 
+def env_flag(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "y", "on")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Find Halo Wars 2 custom matches between tracked players.",
+    )
+    parser.add_argument(
+        "--include-bot-games",
+        action="store_true",
+        help=(
+            "Slower: fetch full details for matches with extra players, then "
+            "include bot games only when every human is tracked and each team "
+            "has at least one human."
+        ),
+    )
+    return parser.parse_args()
+
+
 load_env_file()
 
 API_KEY = os.environ.get("HALO_API_KEY", "")
@@ -124,6 +150,7 @@ MAX_RETRIES = 3
 MIN_TRACKED_PLAYERS = 2  # only include matches with at least this many
 CUSTOM_MATCH_TYPE_ID = 2
 MIN_MATCH_DURATION_SECONDS = int(os.environ.get("MIN_MATCH_DURATION_SECONDS", "180"))
+INCLUDE_BOT_GAMES = env_flag("INCLUDE_BOT_GAMES")
 FORMATTED_OUTPUT_FILE = "formatted_matches.txt"
 RAW_EXPORT_FILE = "group_matches_export.json"
 STATS_OUTPUT_FILE = "stats_summary.txt"
@@ -511,6 +538,28 @@ def bot_count(match_details):
     return sum(1 for player in match_players(match_details) if not player.get("IsHuman"))
 
 
+def team_key(team_id):
+    if team_id is None:
+        return None
+    return str(team_id)
+
+
+def has_human_on_each_team(match_details):
+    teams_with_players = set()
+    teams_with_humans = set()
+
+    for player in match_players(match_details):
+        team_id = team_key(player.get("TeamId"))
+        if team_id is None:
+            return False
+
+        teams_with_players.add(team_id)
+        if player.get("IsHuman"):
+            teams_with_humans.add(team_id)
+
+    return len(teams_with_players) >= 2 and teams_with_players <= teams_with_humans
+
+
 def has_only_tracked_humans(match_details, tracked_players):
     gamertags = human_gamertags(match_details)
     if gamertags is None:
@@ -697,9 +746,10 @@ def readable_match_duration(participants):
 
 def readable_result_lines(participants, labels_by_player, player_aliases):
     groups = {"win": [], "loss": [], "tie": [], "unknown": []}
-    for player, _ in dedupe_participants(participants):
+    for player, entry in dedupe_participants(participants):
         label = labels_by_player.get(player, "unknown")
-        groups[label].append(display_name_for_player(player, player_aliases))
+        output_name = display_name_for_player(player, player_aliases)
+        groups[label].append(f"{output_name}({leader_label(entry)})")
 
     lines = []
     if groups["win"]:
@@ -810,6 +860,9 @@ def build_stats_summary(stats):
 
 
 def main():
+    args = parse_args()
+    include_bot_games = args.include_bot_games or INCLUDE_BOT_GAMES
+
     if not API_KEY or API_KEY == "PASTE_YOUR_SUBSCRIPTION_KEY_HERE":
         print("Set your API key first: copy .env.example to .env, set")
         print("HALO_API_KEY, then re-run.")
@@ -848,6 +901,8 @@ def main():
         print(f"Only checked matches on or after {START_DATE}.")
     if end_date:
         print(f"Only checked matches on or before {END_DATE}.")
+    if include_bot_games:
+        print("Slow bot-game mode enabled: checking full details for extra-player matches.")
     print(
         f"{len(qualifying)} custom matches lasted at least "
         f"{MIN_MATCH_DURATION_SECONDS} seconds "
@@ -862,22 +917,32 @@ def main():
     stats = {}
     match_details_cache = load_match_details_cache()
     fast_path_matches = 0
+    detail_checked_matches = 0
     verified_suspicious_matches = 0
+    included_bot_matches = 0
     skipped_missing_details = 0
     skipped_unlisted_players = 0
+    skipped_bot_team_without_human = 0
     skipped_same_side = 0
     for mid, history_participants in sorted(
         qualifying.items(),
         key=lambda kv: str(find_date_field(kv[1][0][1]) or "")
     ):
-        if not has_only_tracked_players(history_participants):
-            skipped_unlisted_players += 1
-            continue
-
         participants = history_participants
         match_details = None
         bots = 0
-        if needs_match_detail_verification(history_participants):
+        only_tracked_players = has_only_tracked_players(history_participants)
+        extra_player_match = not only_tracked_players
+        needs_details = needs_match_detail_verification(history_participants)
+
+        if extra_player_match and not include_bot_games:
+            skipped_unlisted_players += 1
+            continue
+
+        if extra_player_match:
+            needs_details = True
+
+        if needs_details:
             match_details, from_cache = fetch_match_details(mid, match_details_cache)
             if not from_cache:
                 save_match_details_cache(match_details_cache)
@@ -887,9 +952,20 @@ def main():
                 skipped_missing_details += 1
                 continue
 
+            detail_checked_matches += 1
+
             if not has_only_tracked_humans(match_details, tracked_players):
                 skipped_unlisted_players += 1
                 continue
+
+            bots = bot_count(match_details)
+            if extra_player_match:
+                if bots == 0:
+                    skipped_unlisted_players += 1
+                    continue
+                if not has_human_on_each_team(match_details):
+                    skipped_bot_team_without_human += 1
+                    continue
 
             participants = tracked_participants_from_details(match_details, tracked_players)
             if (
@@ -899,8 +975,8 @@ def main():
             ):
                 continue
 
-            bots = bot_count(match_details)
-            verified_suspicious_matches += 1
+            if needs_match_detail_verification(history_participants):
+                verified_suspicious_matches += 1
         else:
             fast_path_matches += 1
 
@@ -915,6 +991,8 @@ def main():
 
         print(formatted_line)
         formatted_lines.append(formatted_line)
+        if bots:
+            included_bot_matches += 1
         match_history_blocks.append(
             match_history_block(
                 mid,
@@ -960,9 +1038,18 @@ def main():
     print("=" * 70)
     print(f"\n{len(formatted_lines)} custom head-to-head matches printed.")
     print(f"{fast_path_matches} matches used fast history-row results.")
+    print(f"{detail_checked_matches} matches checked with full details.")
     print(f"{verified_suspicious_matches} suspicious matches verified with full details.")
-    print(f"{skipped_missing_details} suspicious matches skipped because details were unavailable.")
-    print(f"{skipped_unlisted_players} matches with untracked players or bots skipped.")
+    print(f"{skipped_missing_details} matches skipped because details were unavailable.")
+    if include_bot_games:
+        print(f"{included_bot_matches} bot matches included.")
+        print(f"{skipped_unlisted_players} matches with untracked humans skipped.")
+        print(
+            f"{skipped_bot_team_without_human} bot matches skipped because "
+            "a team had no human player."
+        )
+    else:
+        print(f"{skipped_unlisted_players} matches with untracked players or bots skipped.")
     print(f"{skipped_same_side} same-side matches skipped.")
     print(f"\nFormatted matches saved to {FORMATTED_OUTPUT_FILE}")
     print(f"Readable match history saved to {MATCH_HISTORY_OUTPUT_FILE}")
