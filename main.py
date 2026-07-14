@@ -127,6 +127,7 @@ MIN_MATCH_DURATION_SECONDS = int(os.environ.get("MIN_MATCH_DURATION_SECONDS", "1
 FORMATTED_OUTPUT_FILE = "formatted_matches.txt"
 RAW_EXPORT_FILE = "group_matches_export.json"
 STATS_OUTPUT_FILE = "stats_summary.txt"
+MATCH_HISTORY_OUTPUT_FILE = "match_history.txt"
 
 LEADER_NAMES = {
     1: "Captain Cutter",
@@ -145,6 +146,24 @@ LEADER_NAMES = {
     14: "Yapyap THE DESTROYER",
     15: "Pavium",
     16: "Voridus",
+}
+
+MAP_NAMES = {
+    "rostermode\\design\\RM_EvenFlow_Desert\\RM_EvenFlow_Desert": "SIROCCO",
+    "rostermode\\design\\RM_EvenFlowArt\\RM_EvenFlowArt": "The Proving Grounds",
+    "rostermode\\design\\RM_EvenFlowNight\\RM_EvenFlowNight": "NOCTURNE",
+    "skirmish\\design\\Ep02_M03\\Ep02_M03": "FISSURES",
+    "skirmish\\design\\FF_StopTheSignal\\FF_StopTheSignal": "HIGH BASTION",
+    "skirmish\\design\\fort_jordan\\fort_jordan": "FORT JORDAN",
+    "skirmish\\design\\MC_EnforcerValley\\MC_EnforcerValley": "MIRAGE",
+    "skirmish\\design\\MP_Boneyard\\MP_Boneyard": "HIGHWAY",
+    "skirmish\\design\\MP_Bridges\\MP_Bridges": "FRONTIER",
+    "skirmish\\design\\MP_Caldera\\MP_Caldera": "ASHES",
+    "skirmish\\design\\MP_Eagle\\MP_Eagle": "BADLANDS",
+    "skirmish\\design\\MP_Fracture\\MP_Fracture": "RIFT",
+    "skirmish\\design\\MP_Razorblade\\MP_Razorblade": "BEDROCK",
+    "skirmish\\design\\MP_Ricochet\\MP_Ricochet": "SENTRY",
+    "skirmish\\design\\MP_Veteran\\MP_Veteran": "VAULT",
 }
 
 
@@ -215,6 +234,11 @@ def fetch_player_history(player, match_type, start_date=None, end_date=None):
     return entries
 
 
+def fetch_match_details(match_id):
+    url = f"{BASE_URL}/stats/hw2/matches/{match_id}"
+    return _get(url)
+
+
 def find_result_fields(entry):
     """Recursively find any key that looks like it encodes win/loss/rank."""
     hits = {}
@@ -274,6 +298,13 @@ def parse_date(value, setting_name="date"):
     return parsed.astimezone(timezone.utc)
 
 
+def readable_date(value):
+    parsed = parse_date(value, "match date")
+    if not parsed:
+        return "unknown date"
+    return parsed.strftime("%Y-%m-%d %H:%M UTC")
+
+
 def is_before_start_date(entry, start_date):
     if not start_date:
         return False
@@ -310,6 +341,15 @@ def guess_label(value):
 
 
 def result_for_entry(entry):
+    team_id = entry.get("TeamId")
+    teams = entry.get("Teams")
+    if team_id is not None and isinstance(teams, dict):
+        team = teams.get(str(team_id)) or teams.get(team_id)
+        if isinstance(team, dict) and "MatchOutcome" in team:
+            return guess_label(team["MatchOutcome"]), {
+                "Teams.TeamId.MatchOutcome": team["MatchOutcome"]
+            }
+
     if "PlayerMatchOutcome" in entry:
         return guess_label(entry["PlayerMatchOutcome"]), {
             "PlayerMatchOutcome": entry["PlayerMatchOutcome"]
@@ -333,6 +373,17 @@ def dedupe_participants(participants):
         seen.add(key)
         deduped.append((player, entry))
     return deduped
+
+
+def normalize_gamertag(gamertag):
+    return gamertag.strip().lower()
+
+
+def tracked_player_lookup(tracked_players):
+    return {
+        normalize_gamertag(player): player
+        for player in tracked_players
+    }
 
 
 def display_name_for_player(player, player_aliases):
@@ -369,6 +420,71 @@ def format_match_line(participants, player_aliases=None):
 def has_winners_and_losers(labels_by_player):
     labels = set(labels_by_player.values())
     return "win" in labels and "loss" in labels
+
+
+def match_players(match_details):
+    players = match_details.get("Players", {})
+    if not isinstance(players, dict):
+        return []
+    return list(players.values())
+
+
+def human_gamertags(match_details):
+    gamertags = []
+    for player in match_players(match_details):
+        if not player.get("IsHuman"):
+            continue
+        human_id = player.get("HumanPlayerId") or {}
+        gamertag = human_id.get("Gamertag")
+        if not gamertag:
+            return None
+        gamertags.append(gamertag)
+    return gamertags
+
+
+def bot_count(match_details):
+    return sum(1 for player in match_players(match_details) if not player.get("IsHuman"))
+
+
+def has_only_tracked_humans(match_details, tracked_players):
+    gamertags = human_gamertags(match_details)
+    if gamertags is None:
+        return False
+
+    tracked = set(tracked_player_lookup(tracked_players))
+    return all(normalize_gamertag(gamertag) in tracked for gamertag in gamertags)
+
+
+def tracked_participants_from_details(match_details, tracked_players):
+    lookup = tracked_player_lookup(tracked_players)
+    participants = []
+
+    for player in match_players(match_details):
+        if not player.get("IsHuman"):
+            continue
+
+        human_id = player.get("HumanPlayerId") or {}
+        gamertag = human_id.get("Gamertag")
+        if not gamertag:
+            continue
+
+        tracked_name = lookup.get(normalize_gamertag(gamertag))
+        if not tracked_name:
+            continue
+
+        entry = dict(player)
+        entry["MatchId"] = match_details.get("MatchId")
+        entry["MatchType"] = match_details.get("MatchType")
+        entry["GameMode"] = match_details.get("GameMode")
+        entry["MapId"] = match_details.get("MapId")
+        entry["MatchStartDate"] = match_details.get("MatchStartDate")
+        entry["PlayerMatchDuration"] = (
+            match_details.get("MatchDuration") or player.get("TimeInMatch")
+        )
+        entry["Teams"] = match_details.get("Teams")
+        participants.append((tracked_name, entry))
+
+    return participants
 
 
 def is_custom_match(participants):
@@ -430,6 +546,23 @@ def parse_duration_seconds(value):
     return days * 86400 + hours * 3600 + minutes * 60 + seconds
 
 
+def readable_duration(value):
+    seconds = parse_duration_seconds(value)
+    if seconds is None:
+        return "unknown duration"
+
+    return format_duration_seconds(seconds)
+
+
+def format_duration_seconds(seconds):
+    total_seconds = int(round(seconds))
+    minutes, seconds = divmod(total_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {minutes}m {seconds}s"
+    return f"{minutes}m {seconds}s"
+
+
 def is_long_enough_match(participants):
     durations = [
         parse_duration_seconds(entry.get("PlayerMatchDuration"))
@@ -437,6 +570,64 @@ def is_long_enough_match(participants):
     ]
     durations = [duration for duration in durations if duration is not None]
     return not durations or max(durations) >= MIN_MATCH_DURATION_SECONDS
+
+
+def map_label(entry):
+    map_id = entry.get("MapId")
+    if not map_id:
+        return "unknown map"
+    return MAP_NAMES.get(map_id, map_id)
+
+
+def readable_match_duration(participants):
+    durations = [
+        parse_duration_seconds(entry.get("PlayerMatchDuration"))
+        for _, entry in dedupe_participants(participants)
+    ]
+    durations = [duration for duration in durations if duration is not None]
+    if not durations:
+        return "unknown duration"
+    return format_duration_seconds(max(durations))
+
+
+def readable_result_lines(participants, labels_by_player, player_aliases):
+    groups = {"win": [], "loss": [], "tie": [], "unknown": []}
+    for player, _ in dedupe_participants(participants):
+        label = labels_by_player.get(player, "unknown")
+        groups[label].append(display_name_for_player(player, player_aliases))
+
+    lines = []
+    if groups["win"]:
+        lines.append(f"  Winners: {', '.join(groups['win'])}")
+    if groups["loss"]:
+        lines.append(f"  Losers:  {', '.join(groups['loss'])}")
+    if groups["tie"]:
+        lines.append(f"  Ties:    {', '.join(groups['tie'])}")
+    if groups["unknown"]:
+        lines.append(f"  Unknown: {', '.join(groups['unknown'])}")
+    return lines
+
+
+def match_history_block(
+    match_id,
+    date,
+    participants,
+    labels_by_player,
+    player_aliases,
+    bots=0,
+):
+    first_entry = dedupe_participants(participants)[0][1]
+    lines = [readable_date(date)]
+    lines.extend(readable_result_lines(participants, labels_by_player, player_aliases))
+    lines.extend([
+        f"  Map:      {map_label(first_entry)}",
+        f"  Duration: {readable_match_duration(participants)}",
+    ])
+    if bots:
+        bot_word = "bot" if bots == 1 else "bots"
+        lines.append(f"  Bots:     {bots} {bot_word}")
+    lines.append(f"  MatchId:  {match_id}")
+    return "\n".join(lines)
 
 
 def empty_stat_record():
@@ -562,15 +753,30 @@ def main():
 
     export_rows = []
     formatted_lines = []
+    match_history_blocks = []
     stats = {}
+    skipped_missing_details = 0
     skipped_unlisted_players = 0
     skipped_same_side = 0
-    for mid, participants in sorted(
+    for mid, history_participants in sorted(
         qualifying.items(),
         key=lambda kv: str(find_date_field(kv[1][0][1]) or "")
     ):
-        if not has_only_tracked_players(participants):
+        match_details = fetch_match_details(mid)
+        if not match_details:
+            skipped_missing_details += 1
+            continue
+
+        if not has_only_tracked_humans(match_details, tracked_players):
             skipped_unlisted_players += 1
+            continue
+
+        participants = tracked_participants_from_details(match_details, tracked_players)
+        if (
+            len(participants) < MIN_TRACKED_PLAYERS
+            or not is_custom_match(participants)
+            or not is_long_enough_match(participants)
+        ):
             continue
 
         date = find_date_field(participants[0][1])
@@ -584,6 +790,16 @@ def main():
 
         print(formatted_line)
         formatted_lines.append(formatted_line)
+        match_history_blocks.append(
+            match_history_block(
+                mid,
+                date,
+                participants,
+                labels_by_player,
+                player_aliases,
+                bot_count(match_details),
+            )
+        )
 
         for player, entry in dedupe_participants(participants):
             result = labels_by_player.get(player, "unknown")
@@ -594,6 +810,7 @@ def main():
                 "player": player,
                 "output_name": display_name_for_player(player, player_aliases),
                 "leader": leader_label(entry),
+                "map": map_label(entry),
                 "formatted_result": result,
                 "result_fields": result_fields_by_player.get(player, {}),
                 "raw_entry": entry,
@@ -610,11 +827,18 @@ def main():
     with open(STATS_OUTPUT_FILE, "w", encoding="utf-8") as f:
         f.write(build_stats_summary(stats))
 
+    with open(MATCH_HISTORY_OUTPUT_FILE, "w", encoding="utf-8") as f:
+        f.write("\n\n".join(match_history_blocks))
+        if match_history_blocks:
+            f.write("\n")
+
     print("=" * 70)
     print(f"\n{len(formatted_lines)} custom head-to-head matches printed.")
-    print(f"{skipped_unlisted_players} matches with unlisted players skipped.")
+    print(f"{skipped_missing_details} matches skipped because details were unavailable.")
+    print(f"{skipped_unlisted_players} matches with unlisted human players skipped.")
     print(f"{skipped_same_side} same-side matches skipped.")
     print(f"\nFormatted matches saved to {FORMATTED_OUTPUT_FILE}")
+    print(f"Readable match history saved to {MATCH_HISTORY_OUTPUT_FILE}")
     print(f"Stats summary saved to {STATS_OUTPUT_FILE}")
     print(f"Full details saved to {RAW_EXPORT_FILE}")
 

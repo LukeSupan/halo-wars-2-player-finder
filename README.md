@@ -55,21 +55,23 @@ this checks exclusively custom games. if you want others you can alter this to a
    ```
 
 The script only checks custom games that lasted at least
-`MIN_MATCH_DURATION_SECONDS`. Every player in the match must be listed in
-`tracked_players.txt`; matches with unlisted players are skipped. It prints
-matches in chronological order when the tracked players include both a winner
-and a loser, like:
+`MIN_MATCH_DURATION_SECONDS`. Every human player in the match must be listed in
+`tracked_players.txt`; computer players are allowed. Matches with unlisted
+human players are skipped. It prints matches in chronological order when the
+tracked players include both a winner and a loser, like:
 
 ```text
 luke,ray/win|jr,evan/loss
 ```
 
-It also saves that copy-friendly output to `formatted_matches.txt`, plus a
-simple stats compilation in `stats_summary.txt` with:
+It also saves that copy-friendly output to `formatted_matches.txt`, a readable
+chronological match list with dates, winners, losers, map names, and durations
+in `match_history.txt`, plus a simple stats compilation in `stats_summary.txt`
+with:
 
 - overall winrate for each tracked player
 - winrate for each tracked player on each leader name
 
-The generated `formatted_matches.txt`, `stats_summary.txt`, and
+The generated `formatted_matches.txt`, `match_history.txt`, `stats_summary.txt`, and
 `group_matches_export.json` files are ignored by Git so local test runs do not
 get committed by accident.
