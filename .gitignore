@@ -6,7 +6,12 @@ group_matches_export.json
 formatted_matches.txt
 match_history.txt
 stats_summary.txt
+session_group_matches_export.json
+session_formatted_matches.txt
+session_match_history.txt
+session_stats_summary.txt
 match_details_cache.json
+session_watcher.log
 
 # Python
 __pycache__/

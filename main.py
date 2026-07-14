@@ -31,6 +31,7 @@ Halo Wars 2 match history uses PlayerMatchOutcome: 1 = win, 2 = loss.
 """
 
 import time
+import argparse
 import json
 import os
 import re
@@ -268,6 +269,71 @@ def fetch_match_details(match_id, cache=None):
     return match_details, False
 
 
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Find Halo Wars 2 custom matches among tracked players.",
+    )
+    parser.add_argument(
+        "--start",
+        "--start-date",
+        dest="start_date",
+        default=START_DATE,
+        help=(
+            "Only include matches on or after this date/time. Accepts YYYY-MM-DD "
+            "or an ISO timestamp like 2026-07-14T01:30:00Z. Defaults to START_DATE."
+        ),
+    )
+    parser.add_argument(
+        "--end",
+        "--end-date",
+        dest="end_date",
+        default=END_DATE,
+        help=(
+            "Only include matches on or before this date/time. Accepts YYYY-MM-DD "
+            "or an ISO timestamp like 2026-07-14T04:10:00Z. Defaults to END_DATE."
+        ),
+    )
+    parser.add_argument(
+        "--output-prefix",
+        default="",
+        help=(
+            "Prefix generated output files, for example 'session' writes "
+            "session_formatted_matches.txt."
+        ),
+    )
+    parser.add_argument(
+        "--session",
+        action="store_true",
+        help="Shortcut for --output-prefix session.",
+    )
+    return parser.parse_args(argv)
+
+
+def output_filename(base_name, prefix):
+    if not prefix:
+        return base_name
+
+    clean_prefix = prefix.strip().strip("_-")
+    if not clean_prefix:
+        return base_name
+
+    if any(separator in clean_prefix for separator in ("/", "\\", ":")):
+        print(f"Invalid output prefix: {prefix}")
+        print("Use a simple filename prefix like session or 2026-07-14-session.")
+        sys.exit(1)
+
+    return f"{clean_prefix}_{base_name}"
+
+
+def output_files_for(prefix):
+    return {
+        "formatted": output_filename(FORMATTED_OUTPUT_FILE, prefix),
+        "raw_export": output_filename(RAW_EXPORT_FILE, prefix),
+        "stats": output_filename(STATS_OUTPUT_FILE, prefix),
+        "match_history": output_filename(MATCH_HISTORY_OUTPUT_FILE, prefix),
+    }
+
+
 def find_result_fields(entry):
     """Recursively find any key that looks like it encodes win/loss/rank."""
     hits = {}
@@ -355,7 +421,7 @@ def parse_date(value, setting_name="date"):
         parsed = datetime.fromisoformat(normalized)
     except ValueError:
         print(f"Invalid {setting_name}: {raw_value}")
-        print("Use YYYY-MM-DD, like START_DATE=2026-07-14")
+        print("Use YYYY-MM-DD or an ISO timestamp like 2026-07-14T01:30:00Z.")
         sys.exit(1)
 
     if parsed.tzinfo is None:
@@ -809,16 +875,22 @@ def build_stats_summary(stats):
     return "\n".join(lines).rstrip() + "\n"
 
 
-def main():
+def main(argv=None):
     if not API_KEY or API_KEY == "PASTE_YOUR_SUBSCRIPTION_KEY_HERE":
         print("Set your API key first: copy .env.example to .env, set")
         print("HALO_API_KEY, then re-run.")
         sys.exit(1)
 
+    args = parse_args(argv)
+    output_prefix = args.output_prefix
+    if args.session and not output_prefix:
+        output_prefix = "session"
+    output_files = output_files_for(output_prefix)
+
     tracked_players = load_tracked_players()
     player_aliases = load_player_aliases()
-    start_date = parse_date(START_DATE, "START_DATE")
-    end_date = parse_date(END_DATE, "END_DATE")
+    start_date = parse_date(args.start_date, "START_DATE")
+    end_date = parse_date(args.end_date, "END_DATE")
     match_map = defaultdict(list)  # match_id -> [(player, entry), ...]
 
     for player in tracked_players:
@@ -845,9 +917,9 @@ def main():
 
     print(f"\n{len(match_map)} total unique matches seen across tracked players.")
     if start_date:
-        print(f"Only checked matches on or after {START_DATE}.")
+        print(f"Only checked matches on or after {args.start_date}.")
     if end_date:
-        print(f"Only checked matches on or before {END_DATE}.")
+        print(f"Only checked matches on or before {args.end_date}.")
     print(
         f"{len(qualifying)} custom matches lasted at least "
         f"{MIN_MATCH_DURATION_SECONDS} seconds "
@@ -941,18 +1013,18 @@ def main():
                 "raw_entry": entry,
             })
 
-    with open(FORMATTED_OUTPUT_FILE, "w", encoding="utf-8") as f:
+    with open(output_files["formatted"], "w", encoding="utf-8") as f:
         f.write("\n".join(formatted_lines))
         if formatted_lines:
             f.write("\n")
 
-    with open(RAW_EXPORT_FILE, "w", encoding="utf-8") as f:
+    with open(output_files["raw_export"], "w", encoding="utf-8") as f:
         json.dump(export_rows, f, indent=2, default=str)
 
-    with open(STATS_OUTPUT_FILE, "w", encoding="utf-8") as f:
+    with open(output_files["stats"], "w", encoding="utf-8") as f:
         f.write(build_stats_summary(stats))
 
-    with open(MATCH_HISTORY_OUTPUT_FILE, "w", encoding="utf-8") as f:
+    with open(output_files["match_history"], "w", encoding="utf-8") as f:
         f.write("\n\n".join(match_history_blocks))
         if match_history_blocks:
             f.write("\n")
@@ -964,10 +1036,10 @@ def main():
     print(f"{skipped_missing_details} suspicious matches skipped because details were unavailable.")
     print(f"{skipped_unlisted_players} matches with untracked players or bots skipped.")
     print(f"{skipped_same_side} same-side matches skipped.")
-    print(f"\nFormatted matches saved to {FORMATTED_OUTPUT_FILE}")
-    print(f"Readable match history saved to {MATCH_HISTORY_OUTPUT_FILE}")
-    print(f"Stats summary saved to {STATS_OUTPUT_FILE}")
-    print(f"Full details saved to {RAW_EXPORT_FILE}")
+    print(f"\nFormatted matches saved to {output_files['formatted']}")
+    print(f"Readable match history saved to {output_files['match_history']}")
+    print(f"Stats summary saved to {output_files['stats']}")
+    print(f"Full details saved to {output_files['raw_export']}")
 
 
 if __name__ == "__main__":
