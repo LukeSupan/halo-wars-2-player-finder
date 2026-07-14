@@ -55,10 +55,10 @@ this checks exclusively custom games. if you want others you can alter this to a
    ```
 
 The script only checks custom games that lasted at least
-`MIN_MATCH_DURATION_SECONDS`. Every human player in the match must be listed in
-`tracked_players.txt`; computer players are allowed. Matches with unlisted
-human players are skipped. It prints matches in chronological order when the
-tracked players include both a winner and a loser, like:
+`MIN_MATCH_DURATION_SECONDS`. Every player in the match must be listed in
+`tracked_players.txt`; matches with bots or unlisted players are skipped. It
+prints matches in chronological order when the tracked players include both a
+winner and a loser, like:
 
 ```text
 luke,ray/win|jr,evan/loss
@@ -72,6 +72,12 @@ with:
 - overall winrate for each tracked player
 - winrate for each tracked player on each leader name
 
-The generated `formatted_matches.txt`, `match_history.txt`, `stats_summary.txt`, and
-`group_matches_export.json` files are ignored by Git so local test runs do not
-get committed by accident.
+For speed, normal matches use the player-history rows that were already
+fetched. If a match looks suspicious because a tracked player did not complete
+the match or one team has mixed win/loss results, the script fetches full match
+details for only that match and uses team-level outcome data to fix leaver
+cases. Those full-detail responses are cached in `match_details_cache.json`.
+
+The generated `formatted_matches.txt`, `match_history.txt`, `stats_summary.txt`,
+`group_matches_export.json`, and `match_details_cache.json` files are ignored by
+Git so local test runs do not get committed by accident.

@@ -128,6 +128,7 @@ FORMATTED_OUTPUT_FILE = "formatted_matches.txt"
 RAW_EXPORT_FILE = "group_matches_export.json"
 STATS_OUTPUT_FILE = "stats_summary.txt"
 MATCH_HISTORY_OUTPUT_FILE = "match_history.txt"
+MATCH_DETAILS_CACHE_FILE = "match_details_cache.json"
 
 LEADER_NAMES = {
     1: "Captain Cutter",
@@ -234,9 +235,37 @@ def fetch_player_history(player, match_type, start_date=None, end_date=None):
     return entries
 
 
-def fetch_match_details(match_id):
+def load_match_details_cache(path=MATCH_DETAILS_CACHE_FILE):
+    if not os.path.exists(path):
+        return {}
+
+    with open(path, "r", encoding="utf-8") as f:
+        try:
+            cache = json.load(f)
+        except json.JSONDecodeError:
+            print(f"Ignoring invalid {path}; it will be rebuilt.")
+            return {}
+
+    if not isinstance(cache, dict):
+        print(f"Ignoring invalid {path}; it will be rebuilt.")
+        return {}
+    return cache
+
+
+def save_match_details_cache(cache, path=MATCH_DETAILS_CACHE_FILE):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(cache, f, indent=2, default=str)
+
+
+def fetch_match_details(match_id, cache=None):
+    if cache is not None and match_id in cache:
+        return cache[match_id], True
+
     url = f"{BASE_URL}/stats/hw2/matches/{match_id}"
-    return _get(url)
+    match_details = _get(url)
+    if cache is not None and match_details:
+        cache[match_id] = match_details
+    return match_details, False
 
 
 def find_result_fields(entry):
@@ -272,10 +301,46 @@ def _flatten(entry, path=""):
 
 
 def find_date_field(entry):
-    for k, v in _flatten(entry).items():
-        if "time" in k.lower() or "date" in k.lower():
-            return v
+    flattened = _flatten(entry)
+
+    preferred_names = (
+        "matchstartdate.iso8601date",
+        "matchstartdate",
+        "startdate",
+        "matchdate",
+        "date",
+        "timestamp",
+    )
+    for preferred_name in preferred_names:
+        for key, value in flattened.items():
+            if key.lower().endswith(preferred_name) and is_date_like_value(value):
+                return value
+
+    for key, value in flattened.items():
+        normalized_key = key.lower()
+        if (
+            (
+                "date" in normalized_key
+                or "timestamp" in normalized_key
+                or ("start" in normalized_key and "time" in normalized_key)
+            )
+            and "duration" not in normalized_key
+            and "timeinmatch" not in normalized_key
+            and is_date_like_value(value)
+        ):
+            return value
     return None
+
+
+def is_date_like_value(value):
+    if not value:
+        return False
+
+    raw_value = str(value).strip()
+    if raw_value.upper().startswith("P"):
+        return False
+
+    return bool(re.match(r"\d{4}-\d{2}-\d{2}", raw_value))
 
 
 def parse_date(value, setting_name="date"):
@@ -525,6 +590,46 @@ def has_only_tracked_players(participants):
     return len(dedupe_participants(participants)) == total_players
 
 
+def player_completed_match(entry):
+    value = entry.get("PlayerCompletedMatch")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes")
+    return True
+
+
+def has_incomplete_player(participants):
+    return any(
+        not player_completed_match(entry)
+        for _, entry in dedupe_participants(participants)
+    )
+
+
+def has_mixed_results_on_same_team(participants):
+    labels_by_team = defaultdict(set)
+    for _, entry in dedupe_participants(participants):
+        team_id = entry.get("TeamId")
+        if team_id is None:
+            continue
+
+        label, _ = result_for_entry(entry)
+        if label in ("win", "loss"):
+            labels_by_team[team_id].add(label)
+
+    return any(
+        "win" in labels and "loss" in labels
+        for labels in labels_by_team.values()
+    )
+
+
+def needs_match_detail_verification(participants):
+    return (
+        has_incomplete_player(participants)
+        or has_mixed_results_on_same_team(participants)
+    )
+
+
 def parse_duration_seconds(value):
     if not value:
         return None
@@ -755,6 +860,9 @@ def main():
     formatted_lines = []
     match_history_blocks = []
     stats = {}
+    match_details_cache = load_match_details_cache()
+    fast_path_matches = 0
+    verified_suspicious_matches = 0
     skipped_missing_details = 0
     skipped_unlisted_players = 0
     skipped_same_side = 0
@@ -762,22 +870,39 @@ def main():
         qualifying.items(),
         key=lambda kv: str(find_date_field(kv[1][0][1]) or "")
     ):
-        match_details = fetch_match_details(mid)
-        if not match_details:
-            skipped_missing_details += 1
-            continue
-
-        if not has_only_tracked_humans(match_details, tracked_players):
+        if not has_only_tracked_players(history_participants):
             skipped_unlisted_players += 1
             continue
 
-        participants = tracked_participants_from_details(match_details, tracked_players)
-        if (
-            len(participants) < MIN_TRACKED_PLAYERS
-            or not is_custom_match(participants)
-            or not is_long_enough_match(participants)
-        ):
-            continue
+        participants = history_participants
+        match_details = None
+        bots = 0
+        if needs_match_detail_verification(history_participants):
+            match_details, from_cache = fetch_match_details(mid, match_details_cache)
+            if not from_cache:
+                save_match_details_cache(match_details_cache)
+                time.sleep(REQUEST_DELAY)
+
+            if not match_details:
+                skipped_missing_details += 1
+                continue
+
+            if not has_only_tracked_humans(match_details, tracked_players):
+                skipped_unlisted_players += 1
+                continue
+
+            participants = tracked_participants_from_details(match_details, tracked_players)
+            if (
+                len(participants) < MIN_TRACKED_PLAYERS
+                or not is_custom_match(participants)
+                or not is_long_enough_match(participants)
+            ):
+                continue
+
+            bots = bot_count(match_details)
+            verified_suspicious_matches += 1
+        else:
+            fast_path_matches += 1
 
         date = find_date_field(participants[0][1])
         formatted_line, labels_by_player, result_fields_by_player = format_match_line(
@@ -797,7 +922,7 @@ def main():
                 participants,
                 labels_by_player,
                 player_aliases,
-                bot_count(match_details),
+                bots,
             )
         )
 
@@ -834,8 +959,10 @@ def main():
 
     print("=" * 70)
     print(f"\n{len(formatted_lines)} custom head-to-head matches printed.")
-    print(f"{skipped_missing_details} matches skipped because details were unavailable.")
-    print(f"{skipped_unlisted_players} matches with unlisted human players skipped.")
+    print(f"{fast_path_matches} matches used fast history-row results.")
+    print(f"{verified_suspicious_matches} suspicious matches verified with full details.")
+    print(f"{skipped_missing_details} suspicious matches skipped because details were unavailable.")
+    print(f"{skipped_unlisted_players} matches with untracked players or bots skipped.")
     print(f"{skipped_same_side} same-side matches skipped.")
     print(f"\nFormatted matches saved to {FORMATTED_OUTPUT_FILE}")
     print(f"Readable match history saved to {MATCH_HISTORY_OUTPUT_FILE}")

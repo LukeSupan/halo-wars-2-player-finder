@@ -6,6 +6,7 @@ group_matches_export.json
 formatted_matches.txt
 match_history.txt
 stats_summary.txt
+match_details_cache.json
 
 # Python
 __pycache__/
