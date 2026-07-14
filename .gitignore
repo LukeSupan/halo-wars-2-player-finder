@@ -1,0 +1,18 @@
+# Local secrets
+.env
+
+# Script output
+group_matches_export.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

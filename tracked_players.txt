@@ -1,0 +1,10 @@
+# Add one Xbox gamertag per line.
+# Lines that start with # are ignored.
+holesec
+asvrampage
+tekkitcat
+Legom0re
+DONUT DUDE 117
+Elephoont8361
+Austin3886
+BeadiestCorgi40
