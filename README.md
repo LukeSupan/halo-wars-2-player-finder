@@ -55,10 +55,10 @@ this checks exclusively custom games. if you want others you can alter this to a
    ```
 
 The script only checks custom games that lasted at least
-`MIN_MATCH_DURATION_SECONDS`. Every player in the match must be listed in
-`tracked_players.txt`; matches with unlisted players are skipped. It prints
-matches in chronological order when the tracked players include both a winner
-and a loser, like:
+`MIN_MATCH_DURATION_SECONDS`. Every human player in the match must be listed in
+`tracked_players.txt`; computer players are allowed. Matches with unlisted
+human players are skipped. It prints matches in chronological order when the
+tracked players include both a winner and a loser, like:
 
 ```text
 luke,ray/win|jr,evan/loss

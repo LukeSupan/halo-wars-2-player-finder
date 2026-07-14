@@ -234,6 +234,11 @@ def fetch_player_history(player, match_type, start_date=None, end_date=None):
     return entries
 
 
+def fetch_match_details(match_id):
+    url = f"{BASE_URL}/stats/hw2/matches/{match_id}"
+    return _get(url)
+
+
 def find_result_fields(entry):
     """Recursively find any key that looks like it encodes win/loss/rank."""
     hits = {}
@@ -361,6 +366,17 @@ def dedupe_participants(participants):
     return deduped
 
 
+def normalize_gamertag(gamertag):
+    return gamertag.strip().lower()
+
+
+def tracked_player_lookup(tracked_players):
+    return {
+        normalize_gamertag(player): player
+        for player in tracked_players
+    }
+
+
 def display_name_for_player(player, player_aliases):
     if player in player_aliases:
         return player_aliases[player]
@@ -395,6 +411,71 @@ def format_match_line(participants, player_aliases=None):
 def has_winners_and_losers(labels_by_player):
     labels = set(labels_by_player.values())
     return "win" in labels and "loss" in labels
+
+
+def match_players(match_details):
+    players = match_details.get("Players", {})
+    if not isinstance(players, dict):
+        return []
+    return list(players.values())
+
+
+def human_gamertags(match_details):
+    gamertags = []
+    for player in match_players(match_details):
+        if not player.get("IsHuman"):
+            continue
+        human_id = player.get("HumanPlayerId") or {}
+        gamertag = human_id.get("Gamertag")
+        if not gamertag:
+            return None
+        gamertags.append(gamertag)
+    return gamertags
+
+
+def bot_count(match_details):
+    return sum(1 for player in match_players(match_details) if not player.get("IsHuman"))
+
+
+def has_only_tracked_humans(match_details, tracked_players):
+    gamertags = human_gamertags(match_details)
+    if gamertags is None:
+        return False
+
+    tracked = set(tracked_player_lookup(tracked_players))
+    return all(normalize_gamertag(gamertag) in tracked for gamertag in gamertags)
+
+
+def tracked_participants_from_details(match_details, tracked_players):
+    lookup = tracked_player_lookup(tracked_players)
+    participants = []
+
+    for player in match_players(match_details):
+        if not player.get("IsHuman"):
+            continue
+
+        human_id = player.get("HumanPlayerId") or {}
+        gamertag = human_id.get("Gamertag")
+        if not gamertag:
+            continue
+
+        tracked_name = lookup.get(normalize_gamertag(gamertag))
+        if not tracked_name:
+            continue
+
+        entry = dict(player)
+        entry["MatchId"] = match_details.get("MatchId")
+        entry["MatchType"] = match_details.get("MatchType")
+        entry["GameMode"] = match_details.get("GameMode")
+        entry["MapId"] = match_details.get("MapId")
+        entry["MatchStartDate"] = match_details.get("MatchStartDate")
+        entry["PlayerMatchDuration"] = (
+            match_details.get("MatchDuration") or player.get("TimeInMatch")
+        )
+        entry["Teams"] = match_details.get("Teams")
+        participants.append((tracked_name, entry))
+
+    return participants
 
 
 def is_custom_match(participants):
@@ -518,15 +599,25 @@ def readable_result_lines(participants, labels_by_player, player_aliases):
     return lines
 
 
-def match_history_block(match_id, date, participants, labels_by_player, player_aliases):
+def match_history_block(
+    match_id,
+    date,
+    participants,
+    labels_by_player,
+    player_aliases,
+    bots=0,
+):
     first_entry = dedupe_participants(participants)[0][1]
     lines = [readable_date(date)]
     lines.extend(readable_result_lines(participants, labels_by_player, player_aliases))
     lines.extend([
         f"  Map:      {map_label(first_entry)}",
         f"  Duration: {readable_match_duration(participants)}",
-        f"  MatchId:  {match_id}",
     ])
+    if bots:
+        bot_word = "bot" if bots == 1 else "bots"
+        lines.append(f"  Bots:     {bots} {bot_word}")
+    lines.append(f"  MatchId:  {match_id}")
     return "\n".join(lines)
 
 
@@ -655,14 +746,28 @@ def main():
     formatted_lines = []
     match_history_blocks = []
     stats = {}
+    skipped_missing_details = 0
     skipped_unlisted_players = 0
     skipped_same_side = 0
-    for mid, participants in sorted(
+    for mid, history_participants in sorted(
         qualifying.items(),
         key=lambda kv: str(find_date_field(kv[1][0][1]) or "")
     ):
-        if not has_only_tracked_players(participants):
+        match_details = fetch_match_details(mid)
+        if not match_details:
+            skipped_missing_details += 1
+            continue
+
+        if not has_only_tracked_humans(match_details, tracked_players):
             skipped_unlisted_players += 1
+            continue
+
+        participants = tracked_participants_from_details(match_details, tracked_players)
+        if (
+            len(participants) < MIN_TRACKED_PLAYERS
+            or not is_custom_match(participants)
+            or not is_long_enough_match(participants)
+        ):
             continue
 
         date = find_date_field(participants[0][1])
@@ -677,7 +782,14 @@ def main():
         print(formatted_line)
         formatted_lines.append(formatted_line)
         match_history_blocks.append(
-            match_history_block(mid, date, participants, labels_by_player, player_aliases)
+            match_history_block(
+                mid,
+                date,
+                participants,
+                labels_by_player,
+                player_aliases,
+                bot_count(match_details),
+            )
         )
 
         for player, entry in dedupe_participants(participants):
@@ -713,7 +825,8 @@ def main():
 
     print("=" * 70)
     print(f"\n{len(formatted_lines)} custom head-to-head matches printed.")
-    print(f"{skipped_unlisted_players} matches with unlisted players skipped.")
+    print(f"{skipped_missing_details} matches skipped because details were unavailable.")
+    print(f"{skipped_unlisted_players} matches with unlisted human players skipped.")
     print(f"{skipped_same_side} same-side matches skipped.")
     print(f"\nFormatted matches saved to {FORMATTED_OUTPUT_FILE}")
     print(f"Readable match history saved to {MATCH_HISTORY_OUTPUT_FILE}")
