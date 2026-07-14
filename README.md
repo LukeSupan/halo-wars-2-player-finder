@@ -76,10 +76,10 @@ and a loser, like:
 luke,ray/win|jr,evan/loss
 ```
 
-It also saves that copy-friendly output to `formatted_matches.txt`, a readable
-chronological match list with dates, winners, losers, leader names, map names,
-and durations in `match_history.txt`, plus a simple stats compilation in
-`stats_summary.txt` with:
+It also saves that copy-friendly output to `output/formatted_matches.txt`, a
+readable chronological match list with dates, winners, losers, leader names,
+map names, and durations in `output/match_history.txt`, plus a simple stats
+compilation in `output/stats_summary.txt` with:
 
 - overall winrate for each tracked player
 - winrate for each tracked player on each leader name
@@ -89,8 +89,7 @@ fetched. If a match looks suspicious because a tracked player did not complete
 the match, one team has mixed win/loss results, or slow bot mode needs to check
 extra players, the script fetches full match details and uses team-level outcome
 data to fix leaver cases and verify bot games. Those full-detail responses are
-cached in `match_details_cache.json`.
+cached in `output/match_details_cache.json`.
 
-The generated `formatted_matches.txt`, `match_history.txt`, `stats_summary.txt`,
-`group_matches_export.json`, and `match_details_cache.json` files are ignored by
-Git so local test runs do not get committed by accident.
+The generated `output/` folder is ignored by Git so local test runs do not get
+committed by accident.
