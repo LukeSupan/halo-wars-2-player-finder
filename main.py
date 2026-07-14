@@ -32,6 +32,7 @@ Halo Wars 2 match history uses PlayerMatchOutcome: 1 = win, 2 = loss.
 import time
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from urllib.parse import quote
@@ -120,6 +121,7 @@ REQUEST_DELAY = 0.6
 MAX_RETRIES = 3
 MIN_TRACKED_PLAYERS = 2  # only include matches with at least this many
 CUSTOM_MATCH_TYPE_ID = 2
+MIN_MATCH_DURATION_SECONDS = 180
 FORMATTED_OUTPUT_FILE = "formatted_matches.txt"
 RAW_EXPORT_FILE = "group_matches_export.json"
 
@@ -339,6 +341,36 @@ def is_custom_match(participants):
     )
 
 
+def parse_duration_seconds(value):
+    if not value:
+        return None
+
+    match = re.fullmatch(
+        r"P(?:(?P<days>\d+(?:\.\d+)?)D)?"
+        r"(?:T(?:(?P<hours>\d+(?:\.\d+)?)H)?"
+        r"(?:(?P<minutes>\d+(?:\.\d+)?)M)?"
+        r"(?:(?P<seconds>\d+(?:\.\d+)?)S)?)?",
+        str(value).strip(),
+    )
+    if not match:
+        return None
+
+    days = float(match.group("days") or 0)
+    hours = float(match.group("hours") or 0)
+    minutes = float(match.group("minutes") or 0)
+    seconds = float(match.group("seconds") or 0)
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds
+
+
+def is_long_enough_match(participants):
+    durations = [
+        parse_duration_seconds(entry.get("PlayerMatchDuration"))
+        for _, entry in dedupe_participants(participants)
+    ]
+    durations = [duration for duration in durations if duration is not None]
+    return not durations or max(durations) >= MIN_MATCH_DURATION_SECONDS
+
+
 def main():
     if not API_KEY or API_KEY == "PASTE_YOUR_SUBSCRIPTION_KEY_HERE":
         print("Set your API key first: copy .env.example to .env, set")
@@ -365,13 +397,20 @@ def main():
     qualifying = {
         mid: participants
         for mid, participants in match_map.items()
-        if len(participants) >= MIN_TRACKED_PLAYERS and is_custom_match(participants)
+        if (
+            len(participants) >= MIN_TRACKED_PLAYERS
+            and is_custom_match(participants)
+            and is_long_enough_match(participants)
+        )
     }
 
     print(f"\n{len(match_map)} total unique matches seen across tracked players.")
     if start_date:
         print(f"Only checked matches on or after {START_DATE}.")
-    print(f"{len(qualifying)} custom matches had {MIN_TRACKED_PLAYERS}+ tracked players.\n")
+    print(
+        f"{len(qualifying)} custom matches lasted at least 3 minutes "
+        f"and had {MIN_TRACKED_PLAYERS}+ tracked players.\n"
+    )
     print("Formatted matches:")
     print("=" * 70)
 
