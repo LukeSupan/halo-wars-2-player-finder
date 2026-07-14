@@ -28,7 +28,20 @@ this checks exclusively custom games. if you want others you can alter this to a
 3. Edit `tracked_players.txt` to change who gets checked. Add one Xbox
    gamertag per line.
 
-4. Run the finder:
+4. Optional: edit `player_aliases.json` to change how gamertags print in the
+   formatted output:
+
+   ```json
+   {
+     "holesec": "luke",
+     "tekkitcat": "jr"
+   }
+   ```
+
+   Any gamertag not listed there prints as itself. Aliases cannot contain
+   `,`, `/`, or `|` because those characters are used by the output format.
+
+5. Run the finder:
 
    ```powershell
    python main.py

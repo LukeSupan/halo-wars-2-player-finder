@@ -39,6 +39,7 @@ from collections import defaultdict
 
 ENV_FILE = ".env"
 TRACKED_PLAYERS_FILE = "tracked_players.txt"
+PLAYER_ALIASES_FILE = "player_aliases.json"
 
 
 def load_env_file(path=ENV_FILE):
@@ -72,6 +73,38 @@ def load_tracked_players(path=TRACKED_PLAYERS_FILE):
         sys.exit(1)
 
     return players
+
+
+def load_player_aliases(path=PLAYER_ALIASES_FILE):
+    if not os.path.exists(path):
+        return {}
+
+    with open(path, "r", encoding="utf-8") as f:
+        try:
+            aliases = json.load(f)
+        except json.JSONDecodeError as exc:
+            print(f"Invalid JSON in {path}: {exc}")
+            sys.exit(1)
+
+    if not isinstance(aliases, dict):
+        print(f"{path} must be a JSON object like {{\"holesec\": \"luke\"}}")
+        sys.exit(1)
+
+    cleaned = {}
+    for gamertag, output_name in aliases.items():
+        if not isinstance(gamertag, str) or not isinstance(output_name, str):
+            print(f"Every key and value in {path} must be text.")
+            sys.exit(1)
+        gamertag = gamertag.strip()
+        output_name = output_name.strip()
+        if gamertag and output_name:
+            if any(separator in output_name for separator in (",", "/", "|")):
+                print(f"Invalid alias for {gamertag}: {output_name}")
+                print("Aliases cannot contain ',', '/', or '|'.")
+                sys.exit(1)
+            cleaned[gamertag] = output_name
+
+    return cleaned
 
 
 load_env_file()
@@ -263,14 +296,26 @@ def dedupe_participants(participants):
     return deduped
 
 
-def format_match_line(participants):
+def display_name_for_player(player, player_aliases):
+    if player in player_aliases:
+        return player_aliases[player]
+
+    lower_aliases = {
+        gamertag.lower(): output_name
+        for gamertag, output_name in player_aliases.items()
+    }
+    return lower_aliases.get(player.lower(), player)
+
+
+def format_match_line(participants, player_aliases=None):
+    player_aliases = player_aliases or {}
     groups = {"win": [], "loss": [], "tie": [], "unknown": []}
     labels_by_player = {}
     result_fields_by_player = {}
 
     for player, entry in dedupe_participants(participants):
         label, result_fields = result_for_entry(entry)
-        groups[label].append(player)
+        groups[label].append(display_name_for_player(player, player_aliases))
         labels_by_player[player] = label
         result_fields_by_player[player] = result_fields
 
@@ -301,6 +346,7 @@ def main():
         sys.exit(1)
 
     tracked_players = load_tracked_players()
+    player_aliases = load_player_aliases()
     start_date = parse_date(START_DATE, "START_DATE")
     match_map = defaultdict(list)  # match_id -> [(player, entry), ...]
 
@@ -337,7 +383,10 @@ def main():
         key=lambda kv: str(find_date_field(kv[1][0][1]) or "")
     ):
         date = find_date_field(participants[0][1])
-        formatted_line, labels_by_player, result_fields_by_player = format_match_line(participants)
+        formatted_line, labels_by_player, result_fields_by_player = format_match_line(
+            participants,
+            player_aliases,
+        )
         if not has_winners_and_losers(labels_by_player):
             skipped_same_side += 1
             continue
@@ -350,6 +399,7 @@ def main():
                 "match_id": mid,
                 "date": date,
                 "player": player,
+                "output_name": display_name_for_player(player, player_aliases),
                 "formatted_result": labels_by_player.get(player, "unknown"),
                 "result_fields": result_fields_by_player.get(player, {}),
                 "raw_entry": entry,
