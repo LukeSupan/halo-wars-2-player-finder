@@ -1,0 +1,294 @@
+2020-09-06 18:02 UTC
+  Winners: cody
+  Losers:  luke
+  Map:      RIFT
+  Duration: 41m 54s
+  MatchId:  1d6e5204-ca4b-4541-b823-7440eb482aec
+
+2020-09-07 02:19 UTC
+  Winners: luke, cody
+  Losers:  jr, evan
+  Map:      VAULT
+  Duration: 32m 34s
+  MatchId:  85340f07-7d89-40e3-9b66-dfaeb5c3d029
+
+2020-09-07 02:57 UTC
+  Winners: luke, evan
+  Losers:  jr, cody
+  Map:      FRONTIER
+  Duration: 38m 47s
+  MatchId:  df61de05-8ee8-4e96-b75f-f538de41e18f
+
+2020-09-07 19:28 UTC
+  Winners: luke, evan
+  Losers:  jr, cody
+  Map:      FRONTIER
+  Duration: 31m 25s
+  MatchId:  f2ec6a45-27f3-4fe3-8710-e763efef4532
+
+2021-05-25 00:50 UTC
+  Winners: luke, aiden
+  Losers:  jr, cody
+  Map:      VAULT
+  Duration: 40m 32s
+  MatchId:  7231598b-6473-48bb-a1e4-61ec0377ad40
+
+2021-05-26 20:20 UTC
+  Winners: jr
+  Losers:  luke
+  Map:      VAULT
+  Duration: 28m 41s
+  MatchId:  46297246-8307-41ae-a0ca-b25bb7811bca
+
+2021-05-26 23:58 UTC
+  Winners: luke, cody
+  Losers:  jr, evan
+  Map:      FISSURES
+  Duration: 33m 19s
+  MatchId:  e7963de2-7731-4280-9b36-cdf137b49bb4
+
+2021-05-27 00:36 UTC
+  Winners: evan, cody
+  Losers:  luke, jr
+  Map:      FRONTIER
+  Duration: 15m 1s
+  MatchId:  c8872821-1d87-44c3-a581-725040222869
+
+2021-05-27 00:54 UTC
+  Winners: luke, jr
+  Losers:  evan, cody
+  Map:      FRONTIER
+  Duration: 40m 56s
+  MatchId:  37fa5570-6a6c-405d-8767-d713077193cc
+
+2021-05-27 01:38 UTC
+  Winners: luke
+  Losers:  jr, evan, cody
+  Map:      RIFT
+  Duration: 35m 11s
+  MatchId:  9434e4ba-14a8-4558-84cb-b4dae460e75d
+
+2021-05-28 05:30 UTC
+  Winners: jr
+  Losers:  evan
+  Map:      VAULT
+  Duration: 30m 8s
+  MatchId:  893e6071-875b-4c94-9496-b2424a37e83c
+
+2021-05-28 06:04 UTC
+  Winners: evan
+  Losers:  aiden
+  Map:      SENTRY
+  Duration: 13m 41s
+  MatchId:  f541ad08-d59e-46e5-948f-5962cbdd71d5
+
+2021-05-29 01:04 UTC
+  Winners: jr
+  Losers:  cody
+  Map:      VAULT
+  Duration: 20m 17s
+  MatchId:  c6eae528-f0c4-44a4-9c49-c7a42dc79bcb
+
+2021-05-29 01:25 UTC
+  Winners: luke
+  Losers:  jr
+  Map:      VAULT
+  Duration: 29m 8s
+  MatchId:  daa76024-2b5d-43be-a06e-0210435df05c
+
+2021-11-19 21:10 UTC
+  Winners: luke
+  Losers:  jr
+  Map:      VAULT
+  Duration: 19m 32s
+  MatchId:  f2a51dcc-1080-43fe-a6c0-c7a93a9de3af
+
+2021-11-19 21:31 UTC
+  Winners: jr
+  Losers:  luke
+  Map:      VAULT
+  Duration: 32m 19s
+  MatchId:  4475e57f-6838-4a8f-88dc-51102b13abe8
+
+2021-11-21 00:42 UTC
+  Winners: luke
+  Losers:  jr
+  Map:      FORT JORDAN
+  Duration: 30m 31s
+  MatchId:  19889d7b-8c87-4a18-86bd-983ff0a0949c
+
+2021-11-28 00:44 UTC
+  Winners: luke
+  Losers:  jr
+  Map:      VAULT
+  Duration: 32m 35s
+  MatchId:  d8b3f3e8-71be-4205-9871-9be3e067d8f0
+
+2021-11-28 01:23 UTC
+  Winners: luke
+  Losers:  jr
+  Map:      VAULT
+  Duration: 31m 8s
+  MatchId:  927a7d9a-d1c3-4d2e-838c-5f160a92a66a
+
+2021-12-07 02:23 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      VAULT
+  Duration: 24m 31s
+  MatchId:  da7aac1e-8fd8-4a0e-beee-353ec43324f2
+
+2021-12-07 02:49 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      VAULT
+  Duration: 11m 17s
+  MatchId:  38847c34-3bea-45cd-b5a0-567205a89d45
+
+2021-12-07 03:02 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      VAULT
+  Duration: 18m 51s
+  MatchId:  9daa474e-3505-42af-b03c-50f6946b0ab1
+
+2021-12-11 03:22 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      SENTRY
+  Duration: 15m 43s
+  MatchId:  01496600-3fb9-49ce-b278-df3e109e4a59
+
+2021-12-15 02:46 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      ASHES
+  Duration: 13m 35s
+  MatchId:  10c8e840-cc03-4365-94f2-aa00d30fe389
+
+2021-12-16 02:48 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      VAULT
+  Duration: 15m 29s
+  MatchId:  c8262c6e-507f-44b5-8930-76ffa71a29d4
+
+2021-12-18 01:42 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      VAULT
+  Duration: 21m 41s
+  MatchId:  443eabd5-aedb-48c8-8ec3-546971c107fa
+
+2021-12-23 00:47 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      VAULT
+  Duration: 58m 19s
+  MatchId:  97ee4bc4-f6ad-44af-994d-d9b71f7aeb55
+
+2022-08-13 23:57 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      VAULT
+  Duration: 16m 29s
+  MatchId:  b75ffb45-9b8f-4546-a83a-419d3beb1b29
+
+2022-08-14 22:51 UTC
+  Winners: luke
+  Losers:  jr
+  Map:      VAULT
+  Duration: 29m 30s
+  MatchId:  a0f7eead-7778-40bb-b32d-dfc6b9c276c9
+
+2022-08-16 03:39 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      VAULT
+  Duration: 10m 17s
+  MatchId:  9c4c12af-65ed-46f1-ab1d-4ee63526853a
+
+2023-05-04 01:13 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      RIFT
+  Duration: 20m 1s
+  MatchId:  98d056b1-6822-4716-be1d-85f1d4792dff
+
+2023-05-16 02:14 UTC
+  Winners: luke, jr
+  Losers:  aiden, cody
+  Map:      VAULT
+  Duration: 20m 32s
+  MatchId:  1cc43f0e-d0b9-47af-8bf7-fc1b70769c4f
+
+2025-04-09 20:11 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      VAULT
+  Duration: 18m 59s
+  MatchId:  7efbc3ff-17fb-465b-b4bf-5bac50b9c730
+
+2025-04-09 20:34 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      VAULT
+  Duration: 11m 22s
+  MatchId:  41cbfeed-1cf4-47d1-8afa-ffb42ed4a71e
+
+2025-04-09 20:47 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      VAULT
+  Duration: 11m 19s
+  MatchId:  8086806a-40e6-4bbd-a941-6d46697c6c5a
+
+2025-04-11 02:13 UTC
+  Winners: cody
+  Losers:  jr
+  Map:      VAULT
+  Duration: 14m 48s
+  MatchId:  c2c0ac95-be24-4557-8617-634f17a07da9
+
+2025-04-17 01:17 UTC
+  Winners: jr, cody
+  Losers:  luke
+  Map:      VAULT
+  Duration: 19m 52s
+  MatchId:  4ee52d33-12f8-4319-b726-5a1731d6b258
+
+2025-04-17 18:16 UTC
+  Winners: luke
+  Losers:  evan
+  Map:      VAULT
+  Duration: 8m 22s
+  MatchId:  2b208357-508b-4a89-9714-4e26b3a8f5e1
+
+2025-04-17 18:27 UTC
+  Winners: luke
+  Losers:  evan
+  Map:      VAULT
+  Duration: 17m 27s
+  MatchId:  0bb2243a-b038-430b-8047-758bbfc0d42d
+
+2025-04-17 18:47 UTC
+  Winners: luke
+  Losers:  evan
+  Map:      VAULT
+  Duration: 20m 23s
+  MatchId:  01be15a1-882b-40c4-bd2e-991048be8e39
+
+2025-04-19 04:40 UTC
+  Winners: luke
+  Losers:  cody
+  Map:      VAULT
+  Duration: 9m 23s
+  MatchId:  49d4f027-3611-4b88-b4be-3b70e55841d4
+
+2025-04-21 00:42 UTC
+  Winners: jr, cody
+  Losers:  luke
+  Map:      VAULT
+  Duration: 21m 17s
+  MatchId:  9bef8004-73b4-431f-979a-1a8bbfe603df
+

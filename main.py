@@ -341,6 +341,15 @@ def guess_label(value):
 
 
 def result_for_entry(entry):
+    team_id = entry.get("TeamId")
+    teams = entry.get("Teams")
+    if team_id is not None and isinstance(teams, dict):
+        team = teams.get(str(team_id)) or teams.get(team_id)
+        if isinstance(team, dict) and "MatchOutcome" in team:
+            return guess_label(team["MatchOutcome"]), {
+                "Teams.TeamId.MatchOutcome": team["MatchOutcome"]
+            }
+
     if "PlayerMatchOutcome" in entry:
         return guess_label(entry["PlayerMatchOutcome"]), {
             "PlayerMatchOutcome": entry["PlayerMatchOutcome"]
