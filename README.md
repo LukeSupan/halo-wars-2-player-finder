@@ -55,6 +55,12 @@ and a loser, like:
 luke,ray/win|jr,evan/loss
 ```
 
-It also saves that copy-friendly output to `formatted_matches.txt`. The
-generated `formatted_matches.txt` and `group_matches_export.json` files are
-ignored by Git so local test runs do not get committed by accident.
+It also saves that copy-friendly output to `formatted_matches.txt`, plus a
+simple stats compilation in `stats_summary.txt` with:
+
+- overall winrate for each tracked player
+- winrate for each tracked player on each leader name
+
+The generated `formatted_matches.txt`, `stats_summary.txt`, and
+`group_matches_export.json` files are ignored by Git so local test runs do not
+get committed by accident.

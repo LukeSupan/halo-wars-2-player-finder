@@ -9,22 +9,23 @@ and prints who won each one.
 SETUP
 -----
 1. pip install requests
-2. Copy .env.example to .env and set HALO_API_KEY
-3. Edit tracked_players.txt if your list changes
-4. Run: python main.py
+2. Copy .env.example to .env, set HALO_API_KEY, and set START_DATE if you choose
+3. Edit tracked_players.txt with your players' usernames
+4. In the folder, Run: python main.py
 
+We check for custom games with at least 2 tracked players:
 HOW "AT LEAST 2 TRACKED PLAYERS" IS DETERMINED
 ------------------------------------------------
 Each tracked player's own match history is pulled. If the same MatchId
-shows up in 2+ of those histories, that means 2+ of your tracked humans
-were in that game together - a bot opponent never has its own match
+shows up in 2+ of those histories, that means 2+ of your tracked players
+were in that game together since a bot opponent never has its own match
 history, so solo/bot-only games never qualify. No mode filtering needed.
 
 CUSTOM GAME OUTPUT
 ------------------
-Only custom matches are fetched. Matches are printed only when the tracked
-players include both a winner and a loser, which filters out online games
-where all tracked players were on the same side.
+Only custom matches are fetched, the tool could be altered to get real games, but this is for customs. 
+Matches are printed only when the trackedplayers include both a winner and a loser, 
+which filters out online games where all tracked players were on the same side.
 
 Halo Wars 2 match history uses PlayerMatchOutcome: 1 = win, 2 = loss.
 """
@@ -124,6 +125,26 @@ CUSTOM_MATCH_TYPE_ID = 2
 MIN_MATCH_DURATION_SECONDS = 180
 FORMATTED_OUTPUT_FILE = "formatted_matches.txt"
 RAW_EXPORT_FILE = "group_matches_export.json"
+STATS_OUTPUT_FILE = "stats_summary.txt"
+
+LEADER_NAMES = {
+    1: "Captain Cutter",
+    2: "Isabel",
+    3: "Professor Anders",
+    4: "Decimus",
+    5: "Atriox",
+    6: "Shipmaster",
+    7: "Sergeant Forge",
+    8: "Kinsano",
+    9: "Commander Jerome",
+    10: "The Arbiter",
+    11: "Sergeant Johnson",
+    12: "Colony",
+    13: "Serina",
+    14: "Yapyap THE DESTROYER",
+    15: "Pavium",
+    16: "Voridus",
+}
 
 
 def get_requests():
@@ -371,6 +392,80 @@ def is_long_enough_match(participants):
     return not durations or max(durations) >= MIN_MATCH_DURATION_SECONDS
 
 
+def empty_stat_record():
+    return {"wins": 0, "losses": 0, "games": 0}
+
+
+def record_stat(record, result):
+    if result not in ("win", "loss"):
+        return
+
+    record["games"] += 1
+    if result == "win":
+        record["wins"] += 1
+    else:
+        record["losses"] += 1
+
+
+def leader_label(entry):
+    leader_id = entry.get("LeaderId")
+    if leader_id is None:
+        return "unknown leader"
+    return LEADER_NAMES.get(leader_id, f"leader {leader_id}")
+
+
+def add_player_stats(stats, player, entry, result, player_aliases):
+    output_name = display_name_for_player(player, player_aliases)
+    player_stats = stats.setdefault(
+        output_name,
+        {
+            "overall": empty_stat_record(),
+            "leaders": {},
+        },
+    )
+
+    record_stat(player_stats["overall"], result)
+
+    leader = leader_label(entry)
+    leader_stats = player_stats["leaders"].setdefault(leader, empty_stat_record())
+    record_stat(leader_stats, result)
+
+
+def winrate(record):
+    if record["games"] == 0:
+        return 0
+    return record["wins"] / record["games"] * 100
+
+
+def stat_line(name, record):
+    game_word = "game" if record["games"] == 1 else "games"
+    return (
+        f"{name}: {record['wins']}-{record['losses']} "
+        f"({winrate(record):.1f}%, {record['games']} {game_word})"
+    )
+
+
+def build_stats_summary(stats):
+    lines = ["Overall winrates", "=" * 70]
+    for player, player_stats in sorted(
+        stats.items(),
+        key=lambda item: (-item[1]["overall"]["games"], item[0].lower()),
+    ):
+        lines.append(stat_line(player, player_stats["overall"]))
+
+    lines.extend(["", "Winrates by leader", "=" * 70])
+    for player, player_stats in sorted(stats.items(), key=lambda item: item[0].lower()):
+        lines.append(player)
+        for leader, record in sorted(
+            player_stats["leaders"].items(),
+            key=lambda item: (-item[1]["games"], item[0]),
+        ):
+            lines.append(f"  {stat_line(leader, record)}")
+        lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def main():
     if not API_KEY or API_KEY == "PASTE_YOUR_SUBSCRIPTION_KEY_HERE":
         print("Set your API key first: copy .env.example to .env, set")
@@ -416,6 +511,7 @@ def main():
 
     export_rows = []
     formatted_lines = []
+    stats = {}
     skipped_same_side = 0
     for mid, participants in sorted(
         qualifying.items(),
@@ -434,12 +530,15 @@ def main():
         formatted_lines.append(formatted_line)
 
         for player, entry in dedupe_participants(participants):
+            result = labels_by_player.get(player, "unknown")
+            add_player_stats(stats, player, entry, result, player_aliases)
             export_rows.append({
                 "match_id": mid,
                 "date": date,
                 "player": player,
                 "output_name": display_name_for_player(player, player_aliases),
-                "formatted_result": labels_by_player.get(player, "unknown"),
+                "leader": leader_label(entry),
+                "formatted_result": result,
                 "result_fields": result_fields_by_player.get(player, {}),
                 "raw_entry": entry,
             })
@@ -451,10 +550,15 @@ def main():
 
     with open(RAW_EXPORT_FILE, "w", encoding="utf-8") as f:
         json.dump(export_rows, f, indent=2, default=str)
+
+    with open(STATS_OUTPUT_FILE, "w", encoding="utf-8") as f:
+        f.write(build_stats_summary(stats))
+
     print("=" * 70)
     print(f"\n{len(formatted_lines)} custom head-to-head matches printed.")
     print(f"{skipped_same_side} same-side matches skipped.")
     print(f"\nFormatted matches saved to {FORMATTED_OUTPUT_FILE}")
+    print(f"Stats summary saved to {STATS_OUTPUT_FILE}")
     print(f"Full details saved to {RAW_EXPORT_FILE}")
 
 
