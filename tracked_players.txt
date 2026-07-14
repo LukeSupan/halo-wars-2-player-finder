@@ -1,5 +1,6 @@
 # Add one Xbox gamertag per line.
 # Lines that start with # are ignored.
+# These are my buddies. you can track us if you want idc.
 holesec
 asvrampage
 tekkitcat
