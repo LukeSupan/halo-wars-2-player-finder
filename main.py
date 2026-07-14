@@ -109,6 +109,19 @@ def load_player_aliases(path=PLAYER_ALIASES_FILE):
     return cleaned
 
 
+def env_float(name, default):
+    raw_value = os.environ.get(name, str(default)).strip()
+    if not raw_value:
+        return float(default)
+
+    try:
+        return float(raw_value)
+    except ValueError:
+        print(f"Invalid {name}: {raw_value}")
+        print(f"Use a number, like {name}={default}")
+        sys.exit(1)
+
+
 load_env_file()
 
 API_KEY = os.environ.get("HALO_API_KEY", "")
@@ -120,6 +133,7 @@ HEADERS = {"Ocp-Apim-Subscription-Key": API_KEY}
 MATCH_TYPES = ["custom"]
 PAGE_SIZE = 25
 REQUEST_DELAY = 0.6
+MATCH_DETAIL_REQUEST_DELAY = env_float("MATCH_DETAIL_REQUEST_DELAY_SECONDS", "1.0")
 MAX_RETRIES = 3
 MIN_TRACKED_PLAYERS = 2  # only include matches with at least this many
 CUSTOM_MATCH_TYPE_ID = 2
@@ -128,6 +142,7 @@ FORMATTED_OUTPUT_FILE = "formatted_matches.txt"
 RAW_EXPORT_FILE = "group_matches_export.json"
 STATS_OUTPUT_FILE = "stats_summary.txt"
 MATCH_HISTORY_OUTPUT_FILE = "match_history.txt"
+MATCH_DETAILS_CACHE_FILE = "match_details_cache.json"
 
 LEADER_NAMES = {
     1: "Captain Cutter",
@@ -234,9 +249,37 @@ def fetch_player_history(player, match_type, start_date=None, end_date=None):
     return entries
 
 
-def fetch_match_details(match_id):
+def load_match_details_cache(path=MATCH_DETAILS_CACHE_FILE):
+    if not os.path.exists(path):
+        return {}
+
+    with open(path, "r", encoding="utf-8") as f:
+        try:
+            cache = json.load(f)
+        except json.JSONDecodeError:
+            print(f"Ignoring invalid {path}; it will be rebuilt.")
+            return {}
+
+    if not isinstance(cache, dict):
+        print(f"Ignoring invalid {path}; it will be rebuilt.")
+        return {}
+    return cache
+
+
+def save_match_details_cache(cache, path=MATCH_DETAILS_CACHE_FILE):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(cache, f, indent=2, default=str)
+
+
+def fetch_match_details(match_id, cache=None):
+    if cache is not None and match_id in cache:
+        return cache[match_id], True
+
     url = f"{BASE_URL}/stats/hw2/matches/{match_id}"
-    return _get(url)
+    match_details = _get(url)
+    if cache is not None and match_details:
+        cache[match_id] = match_details
+    return match_details, False
 
 
 def find_result_fields(entry):
@@ -272,10 +315,46 @@ def _flatten(entry, path=""):
 
 
 def find_date_field(entry):
-    for k, v in _flatten(entry).items():
-        if "time" in k.lower() or "date" in k.lower():
-            return v
+    flattened = _flatten(entry)
+
+    preferred_names = (
+        "matchstartdate.iso8601date",
+        "matchstartdate",
+        "startdate",
+        "matchdate",
+        "date",
+        "timestamp",
+    )
+    for preferred_name in preferred_names:
+        for key, value in flattened.items():
+            if key.lower().endswith(preferred_name) and is_date_like_value(value):
+                return value
+
+    for key, value in flattened.items():
+        normalized_key = key.lower()
+        if (
+            (
+                "date" in normalized_key
+                or "timestamp" in normalized_key
+                or ("start" in normalized_key and "time" in normalized_key)
+            )
+            and "duration" not in normalized_key
+            and "timeinmatch" not in normalized_key
+            and is_date_like_value(value)
+        ):
+            return value
     return None
+
+
+def is_date_like_value(value):
+    if not value:
+        return False
+
+    raw_value = str(value).strip()
+    if raw_value.upper().startswith("P"):
+        return False
+
+    return bool(re.match(r"\d{4}-\d{2}-\d{2}", raw_value))
 
 
 def parse_date(value, setting_name="date"):
@@ -755,6 +834,7 @@ def main():
     formatted_lines = []
     match_history_blocks = []
     stats = {}
+    match_details_cache = load_match_details_cache()
     skipped_missing_details = 0
     skipped_unlisted_players = 0
     skipped_same_side = 0
@@ -762,7 +842,11 @@ def main():
         qualifying.items(),
         key=lambda kv: str(find_date_field(kv[1][0][1]) or "")
     ):
-        match_details = fetch_match_details(mid)
+        match_details, from_cache = fetch_match_details(mid, match_details_cache)
+        if not from_cache:
+            save_match_details_cache(match_details_cache)
+            time.sleep(MATCH_DETAIL_REQUEST_DELAY)
+
         if not match_details:
             skipped_missing_details += 1
             continue

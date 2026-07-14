@@ -19,6 +19,7 @@ this checks exclusively custom games. if you want others you can alter this to a
    START_DATE=
    END_DATE=
    MIN_MATCH_DURATION_SECONDS=180
+   MATCH_DETAIL_REQUEST_DELAY_SECONDS=1.0
    ```
 
    To ignore older or newer games, set `START_DATE` / `END_DATE` with
@@ -31,6 +32,9 @@ this checks exclusively custom games. if you want others you can alter this to a
 
    To change the short-game cutoff, set `MIN_MATCH_DURATION_SECONDS`. The
    default is `180`, which means 3 minutes.
+
+   To reduce Halo API rate limiting while fetching full match details, adjust
+   `MATCH_DETAIL_REQUEST_DELAY_SECONDS`. The default is `1.0`.
 
 3. Edit `tracked_players.txt` to change who gets checked. Add one Xbox
    gamertag per line.
@@ -54,6 +58,29 @@ this checks exclusively custom games. if you want others you can alter this to a
    python main.py
    ```
 
+6. Optional: generate a local markdown analysis report:
+
+   ```powershell
+   python ai_report.py
+   ```
+
+   This reads `group_matches_export.json` and writes `analysis_report.md`
+   without changing `formatted_matches.txt`. To fetch fresh API data first:
+
+   ```powershell
+   python ai_report.py --refresh
+   ```
+
+   If Codex CLI is installed and authenticated, you can append an AI-written
+   commentary section from the computed stats:
+
+   ```powershell
+   python ai_report.py --ai codex
+   ```
+
+   On Windows, the script defaults to `codex.cmd` because PowerShell execution
+   policy can block the `codex.ps1` shim.
+
 The script only checks custom games that lasted at least
 `MIN_MATCH_DURATION_SECONDS`. Every human player in the match must be listed in
 `tracked_players.txt`; computer players are allowed. Matches with unlisted
@@ -72,6 +99,6 @@ with:
 - overall winrate for each tracked player
 - winrate for each tracked player on each leader name
 
-The generated `formatted_matches.txt`, `match_history.txt`, `stats_summary.txt`, and
-`group_matches_export.json` files are ignored by Git so local test runs do not
-get committed by accident.
+The generated `formatted_matches.txt`, `match_history.txt`, `stats_summary.txt`,
+`group_matches_export.json`, `analysis_report.md`, and `match_details_cache.json`
+files are ignored by Git so local test runs do not get committed by accident.
