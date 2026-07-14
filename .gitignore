@@ -4,6 +4,7 @@
 # Script output
 group_matches_export.json
 formatted_matches.txt
+match_history.txt
 stats_summary.txt
 
 # Python

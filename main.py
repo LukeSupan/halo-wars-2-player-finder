@@ -127,6 +127,7 @@ MIN_MATCH_DURATION_SECONDS = int(os.environ.get("MIN_MATCH_DURATION_SECONDS", "1
 FORMATTED_OUTPUT_FILE = "formatted_matches.txt"
 RAW_EXPORT_FILE = "group_matches_export.json"
 STATS_OUTPUT_FILE = "stats_summary.txt"
+MATCH_HISTORY_OUTPUT_FILE = "match_history.txt"
 
 LEADER_NAMES = {
     1: "Captain Cutter",
@@ -145,6 +146,24 @@ LEADER_NAMES = {
     14: "Yapyap THE DESTROYER",
     15: "Pavium",
     16: "Voridus",
+}
+
+MAP_NAMES = {
+    "rostermode\\design\\RM_EvenFlow_Desert\\RM_EvenFlow_Desert": "SIROCCO",
+    "rostermode\\design\\RM_EvenFlowArt\\RM_EvenFlowArt": "The Proving Grounds",
+    "rostermode\\design\\RM_EvenFlowNight\\RM_EvenFlowNight": "NOCTURNE",
+    "skirmish\\design\\Ep02_M03\\Ep02_M03": "FISSURES",
+    "skirmish\\design\\FF_StopTheSignal\\FF_StopTheSignal": "HIGH BASTION",
+    "skirmish\\design\\fort_jordan\\fort_jordan": "FORT JORDAN",
+    "skirmish\\design\\MC_EnforcerValley\\MC_EnforcerValley": "MIRAGE",
+    "skirmish\\design\\MP_Boneyard\\MP_Boneyard": "HIGHWAY",
+    "skirmish\\design\\MP_Bridges\\MP_Bridges": "FRONTIER",
+    "skirmish\\design\\MP_Caldera\\MP_Caldera": "ASHES",
+    "skirmish\\design\\MP_Eagle\\MP_Eagle": "BADLANDS",
+    "skirmish\\design\\MP_Fracture\\MP_Fracture": "RIFT",
+    "skirmish\\design\\MP_Razorblade\\MP_Razorblade": "BEDROCK",
+    "skirmish\\design\\MP_Ricochet\\MP_Ricochet": "SENTRY",
+    "skirmish\\design\\MP_Veteran\\MP_Veteran": "VAULT",
 }
 
 
@@ -272,6 +291,13 @@ def parse_date(value, setting_name="date"):
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def readable_date(value):
+    parsed = parse_date(value, "match date")
+    if not parsed:
+        return "unknown date"
+    return parsed.strftime("%Y-%m-%d %H:%M UTC")
 
 
 def is_before_start_date(entry, start_date):
@@ -430,6 +456,23 @@ def parse_duration_seconds(value):
     return days * 86400 + hours * 3600 + minutes * 60 + seconds
 
 
+def readable_duration(value):
+    seconds = parse_duration_seconds(value)
+    if seconds is None:
+        return "unknown duration"
+
+    return format_duration_seconds(seconds)
+
+
+def format_duration_seconds(seconds):
+    total_seconds = int(round(seconds))
+    minutes, seconds = divmod(total_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {minutes}m {seconds}s"
+    return f"{minutes}m {seconds}s"
+
+
 def is_long_enough_match(participants):
     durations = [
         parse_duration_seconds(entry.get("PlayerMatchDuration"))
@@ -437,6 +480,54 @@ def is_long_enough_match(participants):
     ]
     durations = [duration for duration in durations if duration is not None]
     return not durations or max(durations) >= MIN_MATCH_DURATION_SECONDS
+
+
+def map_label(entry):
+    map_id = entry.get("MapId")
+    if not map_id:
+        return "unknown map"
+    return MAP_NAMES.get(map_id, map_id)
+
+
+def readable_match_duration(participants):
+    durations = [
+        parse_duration_seconds(entry.get("PlayerMatchDuration"))
+        for _, entry in dedupe_participants(participants)
+    ]
+    durations = [duration for duration in durations if duration is not None]
+    if not durations:
+        return "unknown duration"
+    return format_duration_seconds(max(durations))
+
+
+def readable_result_lines(participants, labels_by_player, player_aliases):
+    groups = {"win": [], "loss": [], "tie": [], "unknown": []}
+    for player, _ in dedupe_participants(participants):
+        label = labels_by_player.get(player, "unknown")
+        groups[label].append(display_name_for_player(player, player_aliases))
+
+    lines = []
+    if groups["win"]:
+        lines.append(f"  Winners: {', '.join(groups['win'])}")
+    if groups["loss"]:
+        lines.append(f"  Losers:  {', '.join(groups['loss'])}")
+    if groups["tie"]:
+        lines.append(f"  Ties:    {', '.join(groups['tie'])}")
+    if groups["unknown"]:
+        lines.append(f"  Unknown: {', '.join(groups['unknown'])}")
+    return lines
+
+
+def match_history_block(match_id, date, participants, labels_by_player, player_aliases):
+    first_entry = dedupe_participants(participants)[0][1]
+    lines = [readable_date(date)]
+    lines.extend(readable_result_lines(participants, labels_by_player, player_aliases))
+    lines.extend([
+        f"  Map:      {map_label(first_entry)}",
+        f"  Duration: {readable_match_duration(participants)}",
+        f"  MatchId:  {match_id}",
+    ])
+    return "\n".join(lines)
 
 
 def empty_stat_record():
@@ -562,6 +653,7 @@ def main():
 
     export_rows = []
     formatted_lines = []
+    match_history_blocks = []
     stats = {}
     skipped_unlisted_players = 0
     skipped_same_side = 0
@@ -584,6 +676,9 @@ def main():
 
         print(formatted_line)
         formatted_lines.append(formatted_line)
+        match_history_blocks.append(
+            match_history_block(mid, date, participants, labels_by_player, player_aliases)
+        )
 
         for player, entry in dedupe_participants(participants):
             result = labels_by_player.get(player, "unknown")
@@ -594,6 +689,7 @@ def main():
                 "player": player,
                 "output_name": display_name_for_player(player, player_aliases),
                 "leader": leader_label(entry),
+                "map": map_label(entry),
                 "formatted_result": result,
                 "result_fields": result_fields_by_player.get(player, {}),
                 "raw_entry": entry,
@@ -610,11 +706,17 @@ def main():
     with open(STATS_OUTPUT_FILE, "w", encoding="utf-8") as f:
         f.write(build_stats_summary(stats))
 
+    with open(MATCH_HISTORY_OUTPUT_FILE, "w", encoding="utf-8") as f:
+        f.write("\n\n".join(match_history_blocks))
+        if match_history_blocks:
+            f.write("\n")
+
     print("=" * 70)
     print(f"\n{len(formatted_lines)} custom head-to-head matches printed.")
     print(f"{skipped_unlisted_players} matches with unlisted players skipped.")
     print(f"{skipped_same_side} same-side matches skipped.")
     print(f"\nFormatted matches saved to {FORMATTED_OUTPUT_FILE}")
+    print(f"Readable match history saved to {MATCH_HISTORY_OUTPUT_FILE}")
     print(f"Stats summary saved to {STATS_OUTPUT_FILE}")
     print(f"Full details saved to {RAW_EXPORT_FILE}")
 

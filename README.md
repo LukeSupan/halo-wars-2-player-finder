@@ -64,12 +64,14 @@ and a loser, like:
 luke,ray/win|jr,evan/loss
 ```
 
-It also saves that copy-friendly output to `formatted_matches.txt`, plus a
-simple stats compilation in `stats_summary.txt` with:
+It also saves that copy-friendly output to `formatted_matches.txt`, a readable
+chronological match list with dates, winners, losers, map names, and durations
+in `match_history.txt`, plus a simple stats compilation in `stats_summary.txt`
+with:
 
 - overall winrate for each tracked player
 - winrate for each tracked player on each leader name
 
-The generated `formatted_matches.txt`, `stats_summary.txt`, and
+The generated `formatted_matches.txt`, `match_history.txt`, `stats_summary.txt`, and
 `group_matches_export.json` files are ignored by Git so local test runs do not
 get committed by accident.
