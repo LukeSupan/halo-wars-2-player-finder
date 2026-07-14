@@ -20,21 +20,20 @@ shows up in 2+ of those histories, that means 2+ of your tracked humans
 were in that game together - a bot opponent never has its own match
 history, so solo/bot-only games never qualify. No mode filtering needed.
 
-A NOTE ON ACCURACY
--------------------
-The exact field name for "did this player win" isn't in the current
-public docs (they're a few years stale). This script searches each
-match entry for any key containing "outcome", "result", "winner", or
-"rank" and prints what it finds, with a best-effort WIN/LOSS/TIE label
-when the raw value is a recognizable word. If labels look off or blank
-once you run this for real, send me one full entry from
-group_matches_export.json and I'll fix the exact mapping.
+CUSTOM GAME OUTPUT
+------------------
+Only custom matches are fetched. Matches are printed only when the tracked
+players include both a winner and a loser, which filters out online games
+where all tracked players were on the same side.
+
+Halo Wars 2 match history uses PlayerMatchOutcome: 1 = win, 2 = loss.
 """
 
 import time
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from urllib.parse import quote
 from collections import defaultdict
 
@@ -78,14 +77,18 @@ def load_tracked_players(path=TRACKED_PLAYERS_FILE):
 load_env_file()
 
 API_KEY = os.environ.get("HALO_API_KEY", "")
+START_DATE = os.environ.get("START_DATE", "").strip()
 BASE_URL = "https://www.haloapi.com"
 HEADERS = {"Ocp-Apim-Subscription-Key": API_KEY}
 
-MATCH_TYPES = ["matchmaking", "custom"]
+MATCH_TYPES = ["custom"]
 PAGE_SIZE = 25
 REQUEST_DELAY = 0.6
 MAX_RETRIES = 3
 MIN_TRACKED_PLAYERS = 2  # only include matches with at least this many
+CUSTOM_MATCH_TYPE_ID = 2
+FORMATTED_OUTPUT_FILE = "formatted_matches.txt"
+RAW_EXPORT_FILE = "group_matches_export.json"
 
 
 def get_requests():
@@ -117,7 +120,7 @@ def _get(url, params=None):
     return None
 
 
-def fetch_player_history(player, match_type):
+def fetch_player_history(player, match_type, start_date=None):
     """Returns list of raw match-history entries for one player/type."""
     entries = []
     start = 0
@@ -131,7 +134,16 @@ def fetch_player_history(player, match_type):
         results = data.get("Results", data) if isinstance(data, dict) else data
         if not results:
             break
-        entries.extend(results)
+
+        visible_results = [
+            entry
+            for entry in results
+            if not is_before_start_date(entry, start_date)
+        ]
+        entries.extend(visible_results)
+
+        if start_date and results and not visible_results:
+            break
         if len(results) < PAGE_SIZE:
             break
         start += PAGE_SIZE
@@ -178,16 +190,108 @@ def find_date_field(entry):
     return None
 
 
+def parse_date(value, setting_name="date"):
+    if not value:
+        return None
+
+    raw_value = str(value).strip()
+    normalized = raw_value.replace("Z", "+00:00")
+    try:
+        if len(raw_value) == 10:
+            return datetime.fromisoformat(raw_value).replace(tzinfo=timezone.utc)
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        print(f"Invalid {setting_name}: {raw_value}")
+        print("Use YYYY-MM-DD, like START_DATE=2026-07-14")
+        sys.exit(1)
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def is_before_start_date(entry, start_date):
+    if not start_date:
+        return False
+
+    match_date = parse_date(find_date_field(entry), "match date")
+    return bool(match_date and match_date < start_date)
+
+
 def guess_label(value):
+    if value == 1:
+        return "win"
+    if value == 2:
+        return "loss"
+    if value == 3:
+        return "tie"
+
     if isinstance(value, str):
-        v = value.lower()
-        if v in ("win", "won", "victory"):
-            return "WIN"
-        if v in ("loss", "lost", "defeat"):
-            return "LOSS"
-        if v in ("tie", "draw"):
-            return "TIE"
-    return str(value)
+        v = value.strip().lower()
+        if v in ("1", "win", "won", "victory", "victorious", "w"):
+            return "win"
+        if v in ("2", "loss", "lost", "defeat", "defeated", "l"):
+            return "loss"
+        if v in ("3", "tie", "draw"):
+            return "tie"
+    return "unknown"
+
+
+def result_for_entry(entry):
+    if "PlayerMatchOutcome" in entry:
+        return guess_label(entry["PlayerMatchOutcome"]), {
+            "PlayerMatchOutcome": entry["PlayerMatchOutcome"]
+        }
+
+    result_fields = find_result_fields(entry)
+    for key, value in result_fields.items():
+        label = guess_label(value)
+        if label != "unknown":
+            return label, result_fields
+    return "unknown", result_fields
+
+
+def dedupe_participants(participants):
+    seen = set()
+    deduped = []
+    for player, entry in participants:
+        key = player.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append((player, entry))
+    return deduped
+
+
+def format_match_line(participants):
+    groups = {"win": [], "loss": [], "tie": [], "unknown": []}
+    labels_by_player = {}
+    result_fields_by_player = {}
+
+    for player, entry in dedupe_participants(participants):
+        label, result_fields = result_for_entry(entry)
+        groups[label].append(player)
+        labels_by_player[player] = label
+        result_fields_by_player[player] = result_fields
+
+    pieces = [
+        f"{','.join(groups[label])}/{label}"
+        for label in ("win", "loss", "tie", "unknown")
+        if groups[label]
+    ]
+    return "|".join(pieces), labels_by_player, result_fields_by_player
+
+
+def has_winners_and_losers(labels_by_player):
+    labels = set(labels_by_player.values())
+    return "win" in labels and "loss" in labels
+
+
+def is_custom_match(participants):
+    return any(
+        entry.get("MatchType") == CUSTOM_MATCH_TYPE_ID
+        for _, entry in dedupe_participants(participants)
+    )
 
 
 def main():
@@ -197,12 +301,13 @@ def main():
         sys.exit(1)
 
     tracked_players = load_tracked_players()
+    start_date = parse_date(START_DATE, "START_DATE")
     match_map = defaultdict(list)  # match_id -> [(player, entry), ...]
 
     for player in tracked_players:
         for match_type in MATCH_TYPES:
             print(f"Fetching {match_type} history for {player}...")
-            entries = fetch_player_history(player, match_type)
+            entries = fetch_player_history(player, match_type, start_date)
             print(f"  {len(entries)} {match_type} matches found")
             for entry in entries:
                 match_id = entry.get("MatchId") or entry.get("Id")
@@ -214,43 +319,54 @@ def main():
     qualifying = {
         mid: participants
         for mid, participants in match_map.items()
-        if len(participants) >= MIN_TRACKED_PLAYERS
+        if len(participants) >= MIN_TRACKED_PLAYERS and is_custom_match(participants)
     }
 
     print(f"\n{len(match_map)} total unique matches seen across tracked players.")
-    print(f"{len(qualifying)} matches had {MIN_TRACKED_PLAYERS}+ tracked players "
-          f"(real group games, bot/solo games excluded).\n")
+    if start_date:
+        print(f"Only checked matches on or after {START_DATE}.")
+    print(f"{len(qualifying)} custom matches had {MIN_TRACKED_PLAYERS}+ tracked players.\n")
+    print("Formatted matches:")
     print("=" * 70)
 
     export_rows = []
+    formatted_lines = []
+    skipped_same_side = 0
     for mid, participants in sorted(
         qualifying.items(),
         key=lambda kv: str(find_date_field(kv[1][0][1]) or "")
     ):
         date = find_date_field(participants[0][1])
-        print(f"Match {mid}" + (f"  ({date})" if date else ""))
-        for player, entry in participants:
-            result_fields = find_result_fields(entry)
-            if result_fields:
-                key, value = next(iter(result_fields.items()))
-                print(f"  {player:20s} -> {guess_label(value):6s} (raw: {key}={value})")
-            else:
-                print(f"  {player:20s} -> no result field found "
-                      f"(entry keys: {list(entry.keys())})")
+        formatted_line, labels_by_player, result_fields_by_player = format_match_line(participants)
+        if not has_winners_and_losers(labels_by_player):
+            skipped_same_side += 1
+            continue
+
+        print(formatted_line)
+        formatted_lines.append(formatted_line)
+
+        for player, entry in dedupe_participants(participants):
             export_rows.append({
                 "match_id": mid,
                 "date": date,
                 "player": player,
-                "result_fields": result_fields,
+                "formatted_result": labels_by_player.get(player, "unknown"),
+                "result_fields": result_fields_by_player.get(player, {}),
                 "raw_entry": entry,
             })
-        print("-" * 70)
 
-    with open("group_matches_export.json", "w") as f:
+    with open(FORMATTED_OUTPUT_FILE, "w", encoding="utf-8") as f:
+        f.write("\n".join(formatted_lines))
+        if formatted_lines:
+            f.write("\n")
+
+    with open(RAW_EXPORT_FILE, "w", encoding="utf-8") as f:
         json.dump(export_rows, f, indent=2, default=str)
-    print("\nFull details saved to group_matches_export.json")
-    print("If the win/loss labels above look wrong or blank, send me one")
-    print("full entry from that file and I'll fix the exact field mapping.")
+    print("=" * 70)
+    print(f"\n{len(formatted_lines)} custom head-to-head matches printed.")
+    print(f"{skipped_same_side} same-side matches skipped.")
+    print(f"\nFormatted matches saved to {FORMATTED_OUTPUT_FILE}")
+    print(f"Full details saved to {RAW_EXPORT_FILE}")
 
 
 if __name__ == "__main__":

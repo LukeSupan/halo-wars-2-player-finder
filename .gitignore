@@ -3,6 +3,7 @@
 
 # Script output
 group_matches_export.json
+formatted_matches.txt
 
 # Python
 __pycache__/

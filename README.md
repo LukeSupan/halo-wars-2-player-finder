@@ -1,5 +1,8 @@
 # halo-wars-2-player-finder
 finds players using the haloapi for stat tracking purposes
+specifically intended to be used with my stat tracker PowerLevel
+if you copy paste the output in youll see nice formatted winrates and all that.
+this checks exclusively custom games. if you want others you can alter this to achieve that.
 
 ## Setup
 
@@ -13,6 +16,13 @@ finds players using the haloapi for stat tracking purposes
 
    ```env
    HALO_API_KEY=your_halo_api_key_here
+   START_DATE=
+   ```
+
+   To ignore older games, set `START_DATE` with `YYYY-MM-DD`, like:
+
+   ```env
+   START_DATE=2026-07-14
    ```
 
 3. Edit `tracked_players.txt` to change who gets checked. Add one Xbox
@@ -24,5 +34,13 @@ finds players using the haloapi for stat tracking purposes
    python main.py
    ```
 
-The generated `group_matches_export.json` file is ignored by Git so local test
-runs do not get committed by accident.
+The script only checks custom games. It prints matches in chronological order
+when the tracked players include both a winner and a loser, like:
+
+```text
+luke,ray/win|jr,evan/loss
+```
+
+It also saves that copy-friendly output to `formatted_matches.txt`. The
+generated `formatted_matches.txt` and `group_matches_export.json` files are
+ignored by Git so local test runs do not get committed by accident.
