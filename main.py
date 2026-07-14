@@ -113,6 +113,7 @@ load_env_file()
 
 API_KEY = os.environ.get("HALO_API_KEY", "")
 START_DATE = os.environ.get("START_DATE", "").strip()
+END_DATE = os.environ.get("END_DATE", "").strip()
 BASE_URL = "https://www.haloapi.com"
 HEADERS = {"Ocp-Apim-Subscription-Key": API_KEY}
 
@@ -122,7 +123,7 @@ REQUEST_DELAY = 0.6
 MAX_RETRIES = 3
 MIN_TRACKED_PLAYERS = 2  # only include matches with at least this many
 CUSTOM_MATCH_TYPE_ID = 2
-MIN_MATCH_DURATION_SECONDS = 180
+MIN_MATCH_DURATION_SECONDS = int(os.environ.get("MIN_MATCH_DURATION_SECONDS", "180"))
 FORMATTED_OUTPUT_FILE = "formatted_matches.txt"
 RAW_EXPORT_FILE = "group_matches_export.json"
 STATS_OUTPUT_FILE = "stats_summary.txt"
@@ -176,7 +177,7 @@ def _get(url, params=None):
     return None
 
 
-def fetch_player_history(player, match_type, start_date=None):
+def fetch_player_history(player, match_type, start_date=None, end_date=None):
     """Returns list of raw match-history entries for one player/type."""
     entries = []
     start = 0
@@ -194,11 +195,18 @@ def fetch_player_history(player, match_type, start_date=None):
         visible_results = [
             entry
             for entry in results
-            if not is_before_start_date(entry, start_date)
+            if (
+                not is_before_start_date(entry, start_date)
+                and not is_after_end_date(entry, end_date)
+            )
         ]
         entries.extend(visible_results)
 
-        if start_date and results and not visible_results:
+        if (
+            start_date
+            and results
+            and all(is_before_start_date(entry, start_date) for entry in results)
+        ):
             break
         if len(results) < PAGE_SIZE:
             break
@@ -272,6 +280,14 @@ def is_before_start_date(entry, start_date):
 
     match_date = parse_date(find_date_field(entry), "match date")
     return bool(match_date and match_date < start_date)
+
+
+def is_after_end_date(entry, end_date):
+    if not end_date:
+        return False
+
+    match_date = parse_date(find_date_field(entry), "match date")
+    return bool(match_date and match_date > end_date)
 
 
 def guess_label(value):
@@ -506,12 +522,13 @@ def main():
     tracked_players = load_tracked_players()
     player_aliases = load_player_aliases()
     start_date = parse_date(START_DATE, "START_DATE")
+    end_date = parse_date(END_DATE, "END_DATE")
     match_map = defaultdict(list)  # match_id -> [(player, entry), ...]
 
     for player in tracked_players:
         for match_type in MATCH_TYPES:
             print(f"Fetching {match_type} history for {player}...")
-            entries = fetch_player_history(player, match_type, start_date)
+            entries = fetch_player_history(player, match_type, start_date, end_date)
             print(f"  {len(entries)} {match_type} matches found")
             for entry in entries:
                 match_id = entry.get("MatchId") or entry.get("Id")
@@ -533,8 +550,11 @@ def main():
     print(f"\n{len(match_map)} total unique matches seen across tracked players.")
     if start_date:
         print(f"Only checked matches on or after {START_DATE}.")
+    if end_date:
+        print(f"Only checked matches on or before {END_DATE}.")
     print(
-        f"{len(qualifying)} custom matches lasted at least 3 minutes "
+        f"{len(qualifying)} custom matches lasted at least "
+        f"{MIN_MATCH_DURATION_SECONDS} seconds "
         f"and had {MIN_TRACKED_PLAYERS}+ tracked players.\n"
     )
     print("Formatted matches:")
