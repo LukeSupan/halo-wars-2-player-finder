@@ -362,6 +362,37 @@ def is_custom_match(participants):
     )
 
 
+def total_players_from_entry(entry):
+    teams = entry.get("Teams")
+    if not isinstance(teams, dict) or not teams:
+        return None
+
+    total = 0
+    for team in teams.values():
+        if not isinstance(team, dict) or "TeamSize" not in team:
+            return None
+        try:
+            total += int(team["TeamSize"])
+        except (TypeError, ValueError):
+            return None
+    return total
+
+
+def total_players_in_match(participants):
+    for _, entry in dedupe_participants(participants):
+        total = total_players_from_entry(entry)
+        if total is not None:
+            return total
+    return None
+
+
+def has_only_tracked_players(participants):
+    total_players = total_players_in_match(participants)
+    if total_players is None:
+        return False
+    return len(dedupe_participants(participants)) == total_players
+
+
 def parse_duration_seconds(value):
     if not value:
         return None
@@ -512,11 +543,16 @@ def main():
     export_rows = []
     formatted_lines = []
     stats = {}
+    skipped_unlisted_players = 0
     skipped_same_side = 0
     for mid, participants in sorted(
         qualifying.items(),
         key=lambda kv: str(find_date_field(kv[1][0][1]) or "")
     ):
+        if not has_only_tracked_players(participants):
+            skipped_unlisted_players += 1
+            continue
+
         date = find_date_field(participants[0][1])
         formatted_line, labels_by_player, result_fields_by_player = format_match_line(
             participants,
@@ -556,6 +592,7 @@ def main():
 
     print("=" * 70)
     print(f"\n{len(formatted_lines)} custom head-to-head matches printed.")
+    print(f"{skipped_unlisted_players} matches with unlisted players skipped.")
     print(f"{skipped_same_side} same-side matches skipped.")
     print(f"\nFormatted matches saved to {FORMATTED_OUTPUT_FILE}")
     print(f"Stats summary saved to {STATS_OUTPUT_FILE}")

@@ -47,9 +47,10 @@ this checks exclusively custom games. if you want others you can alter this to a
    python main.py
    ```
 
-The script only checks custom games that lasted at least 3 minutes. It prints
-matches in chronological order when the tracked players include both a winner
-and a loser, like:
+The script only checks custom games that lasted at least 3 minutes. Every
+player in the match must be listed in `tracked_players.txt`; matches with
+unlisted players are skipped. It prints matches in chronological order when the
+tracked players include both a winner and a loser, like:
 
 ```text
 luke,ray/win|jr,evan/loss
