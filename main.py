@@ -32,6 +32,7 @@ Halo Wars 2 match history uses PlayerMatchOutcome: 1 = win, 2 = loss.
 
 import time
 import argparse
+import html
 import json
 import os
 import re
@@ -130,6 +131,7 @@ RAW_EXPORT_FILE = "group_matches_export.json"
 STATS_OUTPUT_FILE = "stats_summary.txt"
 MATCH_HISTORY_OUTPUT_FILE = "match_history.txt"
 MATCH_DETAILS_CACHE_FILE = "match_details_cache.json"
+REPORT_OUTPUT_FILE = "report.html"
 
 LEADER_NAMES = {
     1: "Captain Cutter",
@@ -331,6 +333,7 @@ def output_files_for(prefix):
         "raw_export": output_filename(RAW_EXPORT_FILE, prefix),
         "stats": output_filename(STATS_OUTPUT_FILE, prefix),
         "match_history": output_filename(MATCH_HISTORY_OUTPUT_FILE, prefix),
+        "report": output_filename(REPORT_OUTPUT_FILE, prefix),
     }
 
 
@@ -875,6 +878,159 @@ def build_stats_summary(stats):
     return "\n".join(lines).rstrip() + "\n"
 
 
+def html_pre_block(text, empty_message):
+    content = text.strip()
+    if not content:
+        content = empty_message
+    return f"<pre>{html.escape(content)}</pre>"
+
+
+def build_html_report(
+    formatted_lines,
+    match_history_blocks,
+    stats_summary,
+    start_date_label,
+    end_date_label,
+    counts,
+):
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    formatted_text = "\n".join(formatted_lines)
+    match_history_text = "\n\n".join(match_history_blocks)
+    window_parts = []
+    if start_date_label:
+        window_parts.append(f"from {start_date_label}")
+    if end_date_label:
+        window_parts.append(f"to {end_date_label}")
+    window_label = " ".join(window_parts) if window_parts else "all available matches"
+
+    count_cards = [
+        ("Printed", counts["printed"]),
+        ("Fast path", counts["fast_path"]),
+        ("Verified", counts["verified"]),
+        ("Skipped untracked", counts["skipped_unlisted"]),
+        ("Same side", counts["skipped_same_side"]),
+    ]
+    cards_html = "\n".join(
+        "<div class=\"metric\">"
+        f"<span>{html.escape(label)}</span>"
+        f"<strong>{value}</strong>"
+        "</div>"
+        for label, value in count_cards
+    )
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Halo Wars 2 Session Report</title>
+  <style>
+    :root {{
+      color-scheme: dark;
+      --bg: #101418;
+      --panel: #171d23;
+      --panel-soft: #1d252c;
+      --text: #eef4f8;
+      --muted: #9fb0bd;
+      --accent: #71d6ff;
+      --line: #2b3640;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      line-height: 1.45;
+    }}
+    main {{
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 40px;
+    }}
+    header {{
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 18px;
+      margin-bottom: 18px;
+    }}
+    h1, h2 {{ margin: 0; }}
+    h1 {{ font-size: clamp(28px, 4vw, 46px); }}
+    h2 {{ font-size: 20px; margin-bottom: 12px; }}
+    .subhead {{
+      color: var(--muted);
+      margin-top: 8px;
+    }}
+    .metrics {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin: 18px 0;
+    }}
+    .metric {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+    }}
+    .metric span {{
+      color: var(--muted);
+      display: block;
+      font-size: 13px;
+    }}
+    .metric strong {{
+      color: var(--accent);
+      display: block;
+      font-size: 28px;
+      margin-top: 4px;
+    }}
+    section {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin-top: 14px;
+      padding: 16px;
+    }}
+    pre {{
+      margin: 0;
+      padding: 14px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--panel-soft);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--text);
+      font: 14px/1.5 Consolas, "Cascadia Mono", monospace;
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Halo Wars 2 Session Report</h1>
+      <div class="subhead">Window: {html.escape(window_label)} &middot; Generated {generated_at}</div>
+    </header>
+    <div class="metrics">
+      {cards_html}
+    </div>
+    <section>
+      <h2>Formatted Matches</h2>
+      {html_pre_block(formatted_text, "No formatted matches found for this session.")}
+    </section>
+    <section>
+      <h2>Stats Summary</h2>
+      {html_pre_block(stats_summary, "No stats available for this session.")}
+    </section>
+    <section>
+      <h2>Match History</h2>
+      {html_pre_block(match_history_text, "No match history found for this session.")}
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
 def main(argv=None):
     if not API_KEY or API_KEY == "PASTE_YOUR_SUBSCRIPTION_KEY_HERE":
         print("Set your API key first: copy .env.example to .env, set")
@@ -1021,13 +1177,31 @@ def main(argv=None):
     with open(output_files["raw_export"], "w", encoding="utf-8") as f:
         json.dump(export_rows, f, indent=2, default=str)
 
+    stats_summary = build_stats_summary(stats)
     with open(output_files["stats"], "w", encoding="utf-8") as f:
-        f.write(build_stats_summary(stats))
+        f.write(stats_summary)
 
     with open(output_files["match_history"], "w", encoding="utf-8") as f:
         f.write("\n\n".join(match_history_blocks))
         if match_history_blocks:
             f.write("\n")
+
+    report_html = build_html_report(
+        formatted_lines,
+        match_history_blocks,
+        stats_summary,
+        args.start_date,
+        args.end_date,
+        {
+            "printed": len(formatted_lines),
+            "fast_path": fast_path_matches,
+            "verified": verified_suspicious_matches,
+            "skipped_unlisted": skipped_unlisted_players,
+            "skipped_same_side": skipped_same_side,
+        },
+    )
+    with open(output_files["report"], "w", encoding="utf-8") as f:
+        f.write(report_html)
 
     print("=" * 70)
     print(f"\n{len(formatted_lines)} custom head-to-head matches printed.")
@@ -1040,6 +1214,7 @@ def main(argv=None):
     print(f"Readable match history saved to {output_files['match_history']}")
     print(f"Stats summary saved to {output_files['stats']}")
     print(f"Full details saved to {output_files['raw_export']}")
+    print(f"Session report saved to {output_files['report']}")
 
 
 if __name__ == "__main__":

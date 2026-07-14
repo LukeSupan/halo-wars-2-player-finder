@@ -2,8 +2,8 @@ param(
     [string]$TaskName = "Halo Wars 2 Session Watcher",
     [string]$Python = "python",
     [int]$PollSeconds = 10,
-    [int]$ApiDelaySeconds = 120,
-    [string[]]$ProcessName = @("HaloWars2", "xgameFinal")
+    [int]$ApiDelaySeconds = 15,
+    [string[]]$ProcessName = @("HaloWars2_WinAppDX12Final", "HaloWars2", "xgameFinal")
 )
 
 $ErrorActionPreference = "Stop"

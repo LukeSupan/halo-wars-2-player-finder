@@ -1,15 +1,18 @@
 param(
-    [string[]]$ProcessName = @("HaloWars2", "xgameFinal"),
+    [string[]]$ProcessName = @("HaloWars2_WinAppDX12Final", "HaloWars2", "xgameFinal"),
     [int]$PollSeconds = 10,
-    [int]$ApiDelaySeconds = 120,
+    [int]$ApiDelaySeconds = 15,
     [int]$StartPaddingSeconds = 30,
     [int]$EndPaddingSeconds = 300,
     [string]$Python = "python",
     [switch]$Continuous,
-    [string]$LogFile = ""
+    [string]$LogFile = "",
+    [switch]$NoPopup
 )
 
 $ErrorActionPreference = "Stop"
+$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location -LiteralPath $ScriptRoot
 
 function Format-UtcIso {
     param([datetime]$Value)
@@ -84,6 +87,15 @@ do {
     }
 
     Write-Status "Session export complete."
+    if (-not $NoPopup) {
+        $reportPath = Join-Path $ScriptRoot "session_report.html"
+        if (Test-Path -LiteralPath $reportPath) {
+            Write-Status "Opening session report: $reportPath"
+            Start-Process -FilePath $reportPath
+        } else {
+            Write-Status "Session report was not found at $reportPath"
+        }
+    }
     if ($Continuous) {
         Write-Status "Continuous mode is on. Waiting for the next Halo Wars 2 session..."
     }

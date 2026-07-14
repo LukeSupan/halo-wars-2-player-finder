@@ -79,13 +79,23 @@ process, wait until the game closes, then export only that session's matches:
 Start the watcher before opening Halo Wars 2 for the cleanest results. It writes
 separate session files so your normal exports are left alone:
 
+- `session_report.html`
 - `session_formatted_matches.txt`
 - `session_match_history.txt`
 - `session_stats_summary.txt`
 - `session_group_matches_export.json`
 
-By default the watcher looks for `HaloWars2` and `xgameFinal`, which are common
-PC process names for this game. If your process name is different, run:
+After each session export, the watcher opens `session_report.html` in your
+default browser. The report shows the formatted matches, stats summary, and
+readable match history together. To keep the watcher quiet, add `-NoPopup`:
+
+```powershell
+.\watch_halo_session.ps1 -Continuous -NoPopup
+```
+
+By default the watcher looks for `HaloWars2_WinAppDX12Final`, `HaloWars2`, and
+`xgameFinal`, which are common PC process names for this game. If your process
+name is different, run:
 
 ```powershell
 .\watch_halo_session.ps1 -ProcessName YourProcessName
@@ -157,6 +167,6 @@ details for only that match and uses team-level outcome data to fix leaver
 cases. Those full-detail responses are cached in `match_details_cache.json`.
 
 The generated `formatted_matches.txt`, `match_history.txt`, `stats_summary.txt`,
-`group_matches_export.json`, session output files, and
+`group_matches_export.json`, HTML report files, session output files, and
 `match_details_cache.json` files are ignored by Git so local test runs do not
 get committed by accident.
